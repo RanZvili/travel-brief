@@ -24,7 +24,7 @@ FORM_HTML = """<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>✈️ Travel Brief Generator</title>
+<title>✈️ TripBrief</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
@@ -35,19 +35,16 @@ body{
   background-attachment:fixed;min-height:100vh;
   display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;
 }
-
 .logo{font-size:48px;margin-bottom:8px;text-align:center}
 h1{font-size:28px;font-weight:900;text-align:center;letter-spacing:-0.5px;margin-bottom:4px}
 .subtitle{font-size:14px;color:rgba(255,255,255,0.45);text-align:center;margin-bottom:32px;font-weight:500}
-
 .card{
   width:100%;max-width:520px;
   background:rgba(255,255,255,0.07);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
   border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:28px;
 }
-
 .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;position:relative}
 .field:last-child{margin-bottom:0}
 label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,0.4)}
 input{
@@ -58,8 +55,24 @@ input{
 input::placeholder{color:rgba(255,255,255,0.25)}
 input:focus{border-color:rgba(168,85,247,0.7);background:rgba(255,255,255,0.11)}
 input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.5;cursor:pointer}
+input[readonly]{opacity:.7;cursor:default}
 
-.divider{height:1px;background:rgba(255,255,255,0.08);margin:18px 0}
+/* Autocomplete dropdown */
+.ac-drop{
+  position:absolute;top:100%;left:0;right:0;z-index:200;margin-top:4px;
+  background:#1e1e3a;border:1px solid rgba(168,85,247,0.4);border-radius:10px;
+  overflow:hidden;display:none;box-shadow:0 8px 32px rgba(0,0,0,0.4);
+}
+.ac-drop.open{display:block}
+.ac-item{
+  padding:10px 14px;cursor:pointer;font-size:14px;font-weight:500;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+}
+.ac-item:last-child{border-bottom:none}
+.ac-item:hover,.ac-item.active{background:rgba(168,85,247,0.2)}
+.ac-city{color:#fff;font-weight:600}
+.ac-country{color:rgba(255,255,255,0.45);font-size:12px;margin-left:6px}
+.ac-auto{font-size:10px;color:#a855f7;margin-left:6px;font-weight:700;text-transform:uppercase}
 
 .btn{
   width:100%;margin-top:18px;
@@ -79,12 +92,7 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.5;
   flex-direction:column;align-items:center;justify-content:center;gap:20px;
 }
 .overlay.show{display:flex}
-.spinner{
-  width:56px;height:56px;border-radius:50%;
-  border:4px solid rgba(255,255,255,0.1);
-  border-top-color:#a855f7;
-  animation:spin 0.8s linear infinite;
-}
+.spinner{width:56px;height:56px;border-radius:50%;border:4px solid rgba(255,255,255,0.1);border-top-color:#a855f7;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .loading-title{font-size:22px;font-weight:800;color:#fff}
 .loading-msg{font-size:14px;color:rgba(255,255,255,0.5);font-weight:500;min-height:20px;transition:.3s}
@@ -92,32 +100,32 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.5;
 .step{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.15)}
 .step.done{background:#a855f7}
 .step.active{background:#fff}
-
 @media(max-width:480px){.row{grid-template-columns:1fr}}
 </style>
 </head><body>
 
 <div class="logo">✈️</div>
-<h1>Travel Brief</h1>
+<h1>TripBrief</h1>
 <p class="subtitle">Instant trip intel for insurance sales professionals</p>
 
 <div class="card">
   <form id="form" onsubmit="submitForm(event)">
 
-    <div class="row">
-      <div class="field">
-        <label>From</label>
-        <input type="text" name="origin" id="origin" placeholder="Tel Aviv" required>
-      </div>
-      <div class="field">
-        <label>To (City)</label>
-        <input type="text" name="destination_city" id="destination_city" placeholder="London" required>
-      </div>
+    <div class="field">
+      <label>From (City)</label>
+      <input type="text" name="origin" id="origin" placeholder="Tel Aviv" autocomplete="off" required>
+      <div class="ac-drop" id="ac-origin"></div>
     </div>
 
     <div class="field">
-      <label>Country</label>
-      <input type="text" name="destination_country" id="destination_country" placeholder="United Kingdom" required>
+      <label>To (City)</label>
+      <input type="text" name="destination_city" id="destination_city" placeholder="Stockholm" autocomplete="off" required>
+      <div class="ac-drop" id="ac-dest"></div>
+    </div>
+
+    <div class="field">
+      <label>Country <span style="color:rgba(168,85,247,0.8);font-size:10px">(auto-filled)</span></label>
+      <input type="text" name="destination_country" id="destination_country" placeholder="Auto-filled from city" required>
     </div>
 
     <div class="row">
@@ -129,13 +137,6 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.5;
         <label>Return</label>
         <input type="date" name="end_date" id="end_date" required>
       </div>
-    </div>
-
-    <div class="divider"></div>
-
-    <div class="field">
-      <label>Company visiting (optional)</label>
-      <input type="text" name="company_name" id="company_name" placeholder="e.g. Lloyd's of London">
     </div>
 
     <button type="submit" class="btn" id="btn">Generate Brief ✈️</button>
@@ -157,7 +158,7 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.5;
 </div>
 
 <script>
-const FIELDS = ['origin','destination_city','destination_country','start_date','end_date','company_name'];
+const FIELDS = ['origin','destination_city','destination_country','start_date','end_date'];
 const msgs = [
   "Checking weather forecasts",
   "Finding time zones & currency",
@@ -174,11 +175,81 @@ window.addEventListener('DOMContentLoaded', () => {
     if (el && saved) el.value = saved;
   });
 });
-
-// Save on change
 FIELDS.forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('change', () => localStorage.setItem('tb_' + id, el.value));
+});
+
+// ── City autocomplete ──────────────────────────────────────────────────────
+let acTimers = {};
+
+function setupCityAC(inputId, dropId, onSelect) {
+  const inp = document.getElementById(inputId);
+  const drop = document.getElementById(dropId);
+  let results = [], activeIdx = -1;
+
+  function showDrop(items) {
+    results = items;
+    activeIdx = -1;
+    if (!items.length) { drop.classList.remove('open'); return; }
+    drop.innerHTML = items.map((r, i) =>
+      `<div class="ac-item" data-i="${i}">
+        <span class="ac-city">${r.name}</span>
+        <span class="ac-country">${r.country}</span>
+        ${r.auto ? '<span class="ac-auto">✓ auto</span>' : ''}
+      </div>`
+    ).join('');
+    drop.classList.add('open');
+    drop.querySelectorAll('.ac-item').forEach(el => {
+      el.addEventListener('mousedown', e => { e.preventDefault(); selectItem(parseInt(el.dataset.i)); });
+    });
+  }
+
+  function selectItem(i) {
+    const r = results[i];
+    inp.value = r.name;
+    localStorage.setItem('tb_' + inputId, r.name);
+    drop.classList.remove('open');
+    if (onSelect) onSelect(r);
+  }
+
+  inp.addEventListener('input', () => {
+    const v = inp.value.trim();
+    if (!v) { drop.classList.remove('open'); return; }
+    clearTimeout(acTimers[inputId]);
+    acTimers[inputId] = setTimeout(() => {
+      fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(v)}&count=6&language=en`)
+        .then(r => r.json())
+        .then(d => {
+          const items = (d.results || []).map(r => ({
+            name: r.name, country: r.country,
+            admin1: r.admin1 || '', auto: false
+          }));
+          showDrop(items);
+        }).catch(() => {});
+    }, 300);
+  });
+
+  inp.addEventListener('keydown', e => {
+    if (!drop.classList.contains('open')) return;
+    const items = drop.querySelectorAll('.ac-item');
+    if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(activeIdx+1, items.length-1); items.forEach((el,i) => el.classList.toggle('active', i===activeIdx)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(activeIdx-1, 0); items.forEach((el,i) => el.classList.toggle('active', i===activeIdx)); }
+    else if (e.key === 'Enter' && activeIdx >= 0) { e.preventDefault(); selectItem(activeIdx); }
+    else if (e.key === 'Escape') { drop.classList.remove('open'); }
+  });
+
+  inp.addEventListener('blur', () => setTimeout(() => drop.classList.remove('open'), 150));
+}
+
+// Origin city AC (no auto-fill of country)
+setupCityAC('origin', 'ac-origin', null);
+
+// Destination city AC — auto-fills country
+setupCityAC('destination_city', 'ac-dest', r => {
+  const countryEl = document.getElementById('destination_country');
+  countryEl.value = r.country;
+  localStorage.setItem('tb_destination_country', r.country);
 });
 
 // ── Loading animation ──────────────────────────────────────────────────────
@@ -217,7 +288,12 @@ function submitForm(e){
 }
 
 // 2. Poll until done
+let pollStart = Date.now();
 function poll(job_id){
+  const elapsed = Math.round((Date.now() - pollStart) / 1000);
+  if (elapsed > 30) {
+    document.getElementById('msg').textContent = `Still working… (${elapsed}s) — rate limits may cause delays`;
+  }
   fetch('/status/' + job_id)
     .then(r => r.json())
     .then(data => {
@@ -243,7 +319,10 @@ function poll(job_id){
 # ── Background worker ────────────────────────────────────────────────────────
 
 def run_job(job_id, origin, destination_city, destination_country, start_date, end_date, company_name):
-    try:
+    import concurrent.futures
+    TIMEOUT = 240  # 4 minutes max
+
+    def _work():
         data = run_agent(
             origin=origin,
             destination_city=destination_city,
@@ -252,9 +331,18 @@ def run_job(job_id, origin, destination_city, destination_country, start_date, e
             end_date=end_date,
             company_name=company_name,
         )
-        html = generate_html(data)
-        with jobs_lock:
-            jobs[job_id] = {"status": "done", "result": html}
+        return generate_html(data)
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            future = ex.submit(_work)
+            try:
+                html = future.result(timeout=TIMEOUT)
+                with jobs_lock:
+                    jobs[job_id] = {"status": "done", "result": html}
+            except concurrent.futures.TimeoutError:
+                with jobs_lock:
+                    jobs[job_id] = {"status": "error", "result": "Timed out after 4 minutes. Please try again — rate limits may be the cause."}
     except Exception as e:
         with jobs_lock:
             jobs[job_id] = {"status": "error", "result": str(e)}
