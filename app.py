@@ -2,13 +2,21 @@
 Travel Brief Web App
 Run locally:  python app.py
 Deploy:       Railway / Render (set GEMINI_API_KEY env var)
+
+Uses background threading + polling to avoid proxy/gateway timeouts.
 """
 
 import os
-from flask import Flask, request, Response
+import uuid
+import threading
+from flask import Flask, request, Response, jsonify
 from travel_agent import run_agent, generate_html
 
 app = Flask(__name__)
+
+# In-memory job store  {job_id: {"status": "pending"|"done"|"error", "result": html}}
+jobs = {}
+jobs_lock = threading.Lock()
 
 # ── Input form ──────────────────────────────────────────────────────────────
 
@@ -39,7 +47,6 @@ h1{font-size:28px;font-weight:900;text-align:center;letter-spacing:-0.5px;margin
 }
 
 .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.row.three{grid-template-columns:1fr 1fr 1fr}
 .field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
 .field:last-child{margin-bottom:0}
 label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,0.4)}
@@ -63,6 +70,7 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.5;
 }
 .btn:hover{opacity:.9;transform:translateY(-1px);box-shadow:0 8px 24px rgba(168,85,247,0.35)}
 .btn:active{transform:none}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
 
 /* Loading overlay */
 .overlay{
@@ -85,7 +93,7 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.5;
 .step.done{background:#a855f7}
 .step.active{background:#fff}
 
-@media(max-width:480px){.row,.row.three{grid-template-columns:1fr}}
+@media(max-width:480px){.row{grid-template-columns:1fr}}
 </style>
 </head><body>
 
@@ -94,32 +102,32 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.5;
 <p class="subtitle">Instant trip intel for insurance sales professionals</p>
 
 <div class="card">
-  <form id="form" onsubmit="submit(event)">
+  <form id="form" onsubmit="submitForm(event)">
 
     <div class="row">
       <div class="field">
         <label>From</label>
-        <input type="text" name="origin" placeholder="Tel Aviv" required>
+        <input type="text" name="origin" id="origin" placeholder="Tel Aviv" required>
       </div>
       <div class="field">
         <label>To (City)</label>
-        <input type="text" name="destination_city" placeholder="London" required>
+        <input type="text" name="destination_city" id="destination_city" placeholder="London" required>
       </div>
     </div>
 
     <div class="field">
       <label>Country</label>
-      <input type="text" name="destination_country" placeholder="United Kingdom" required>
+      <input type="text" name="destination_country" id="destination_country" placeholder="United Kingdom" required>
     </div>
 
     <div class="row">
       <div class="field">
         <label>Departure</label>
-        <input type="date" name="start_date" required>
+        <input type="date" name="start_date" id="start_date" required>
       </div>
       <div class="field">
         <label>Return</label>
-        <input type="date" name="end_date" required>
+        <input type="date" name="end_date" id="end_date" required>
       </div>
     </div>
 
@@ -127,10 +135,10 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.5;
 
     <div class="field">
       <label>Company visiting (optional)</label>
-      <input type="text" name="company_name" placeholder="e.g. Lloyd's of London">
+      <input type="text" name="company_name" id="company_name" placeholder="e.g. Lloyd's of London">
     </div>
 
-    <button type="submit" class="btn">Generate Brief ✈️</button>
+    <button type="submit" class="btn" id="btn">Generate Brief ✈️</button>
   </form>
 </div>
 
@@ -149,6 +157,7 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.5;
 </div>
 
 <script>
+const FIELDS = ['origin','destination_city','destination_country','start_date','end_date','company_name'];
 const msgs = [
   "Checking weather forecasts",
   "Finding time zones & currency",
@@ -156,63 +165,84 @@ const msgs = [
   "Looking up transport & etiquette",
   "Compiling your dashboard",
 ];
-let step = 0, timer;
 
+// ── Restore saved form values ──────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  FIELDS.forEach(id => {
+    const el = document.getElementById(id);
+    const saved = localStorage.getItem('tb_' + id);
+    if (el && saved) el.value = saved;
+  });
+});
+
+// Save on change
+FIELDS.forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', () => localStorage.setItem('tb_' + id, el.value));
+});
+
+// ── Loading animation ──────────────────────────────────────────────────────
+let step = 0, msgTimer;
 function startLoading(){
+  step = 0;
   document.getElementById('overlay').classList.add('show');
-  document.getElementById('s0').className='step active';
-  timer = setInterval(()=>{
-    if(step < msgs.length-1){
-      document.getElementById('s'+step).className='step done';
+  document.getElementById('s0').className = 'step active';
+  document.getElementById('msg').textContent = msgs[0];
+  msgTimer = setInterval(() => {
+    if (step < msgs.length - 1) {
+      document.getElementById('s' + step).className = 'step done';
       step++;
-      document.getElementById('msg').textContent=msgs[step];
-      if(step<5)document.getElementById('s'+step).className='step active';
+      document.getElementById('msg').textContent = msgs[step];
+      if (step < 5) document.getElementById('s' + step).className = 'step active';
     }
-  }, 6000);
+  }, 8000);
+}
+function stopLoading(){
+  clearInterval(msgTimer);
+  document.getElementById('overlay').classList.remove('show');
 }
 
-function submit(e){
+// ── Submit with polling ────────────────────────────────────────────────────
+function submitForm(e){
   e.preventDefault();
-  const form = document.getElementById('form');
-  const data = new FormData(form);
+  const data = new URLSearchParams(new FormData(document.getElementById('form')));
+  document.getElementById('btn').disabled = true;
   startLoading();
-  fetch('/generate', {method:'POST', body: new URLSearchParams(data)})
-    .then(r => r.text())
-    .then(html => {
-      clearInterval(timer);
-      document.open();
-      document.write(html);
-      document.close();
+
+  // 1. Start the job
+  fetch('/start', {method:'POST', body: data})
+    .then(r => r.json())
+    .then(({job_id}) => poll(job_id))
+    .catch(() => { stopLoading(); document.getElementById('btn').disabled=false; alert('Could not start. Please try again.'); });
+}
+
+// 2. Poll until done
+function poll(job_id){
+  fetch('/status/' + job_id)
+    .then(r => r.json())
+    .then(data => {
+      if (data.status === 'done') {
+        clearInterval(msgTimer);
+        document.open();
+        document.write(data.result);
+        document.close();
+      } else if (data.status === 'error') {
+        stopLoading();
+        document.getElementById('btn').disabled = false;
+        alert('Error: ' + data.result);
+      } else {
+        setTimeout(() => poll(job_id), 3000);
+      }
     })
-    .catch(err => {
-      clearInterval(timer);
-      document.getElementById('overlay').classList.remove('show');
-      alert('Something went wrong. Please try again.');
-    });
+    .catch(() => setTimeout(() => poll(job_id), 3000));
 }
 </script>
 </body></html>"""
 
 
-# ── Routes ──────────────────────────────────────────────────────────────────
+# ── Background worker ────────────────────────────────────────────────────────
 
-@app.route('/')
-def index():
-    return FORM_HTML
-
-
-@app.route('/generate', methods=['POST'])
-def generate():
-    origin              = request.form.get('origin', '').strip()
-    destination_city    = request.form.get('destination_city', '').strip()
-    destination_country = request.form.get('destination_country', '').strip()
-    start_date          = request.form.get('start_date', '').strip()
-    end_date            = request.form.get('end_date', '').strip()
-    company_name        = request.form.get('company_name', '').strip()
-
-    if not all([origin, destination_city, destination_country, start_date, end_date]):
-        return "Missing required fields.", 400
-
+def run_job(job_id, origin, destination_city, destination_country, start_date, end_date, company_name):
     try:
         data = run_agent(
             origin=origin,
@@ -223,12 +253,56 @@ def generate():
             company_name=company_name,
         )
         html = generate_html(data)
-        return Response(html, mimetype='text/html')
+        with jobs_lock:
+            jobs[job_id] = {"status": "done", "result": html}
     except Exception as e:
-        return f"<h2>Error generating brief</h2><pre>{e}</pre>", 500
+        with jobs_lock:
+            jobs[job_id] = {"status": "error", "result": str(e)}
 
 
-# ── Entry point ─────────────────────────────────────────────────────────────
+# ── Routes ───────────────────────────────────────────────────────────────────
+
+@app.route('/')
+def index():
+    return FORM_HTML
+
+
+@app.route('/start', methods=['POST'])
+def start():
+    origin              = request.form.get('origin', '').strip()
+    destination_city    = request.form.get('destination_city', '').strip()
+    destination_country = request.form.get('destination_country', '').strip()
+    start_date          = request.form.get('start_date', '').strip()
+    end_date            = request.form.get('end_date', '').strip()
+    company_name        = request.form.get('company_name', '').strip()
+
+    if not all([origin, destination_city, destination_country, start_date, end_date]):
+        return jsonify({"error": "Missing required fields"}), 400
+
+    job_id = str(uuid.uuid4())
+    with jobs_lock:
+        jobs[job_id] = {"status": "pending", "result": None}
+
+    t = threading.Thread(
+        target=run_job,
+        args=(job_id, origin, destination_city, destination_country, start_date, end_date, company_name),
+        daemon=True,
+    )
+    t.start()
+
+    return jsonify({"job_id": job_id})
+
+
+@app.route('/status/<job_id>')
+def status(job_id):
+    with jobs_lock:
+        job = jobs.get(job_id)
+    if not job:
+        return jsonify({"status": "error", "result": "Job not found"}), 404
+    return jsonify(job)
+
+
+# ── Entry point ──────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
