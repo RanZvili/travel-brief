@@ -293,6 +293,15 @@ def start():
     return jsonify({"job_id": job_id})
 
 
+@app.route('/models')
+def list_models():
+    import google.generativeai as genai
+    api_key = os.environ.get("GEMINI_API_KEY")
+    genai.configure(api_key=api_key)
+    names = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
+    return "<br>".join(names)
+
+
 @app.route('/status/<job_id>')
 def status(job_id):
     with jobs_lock:
