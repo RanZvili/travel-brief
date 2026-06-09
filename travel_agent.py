@@ -423,7 +423,25 @@ def run_agent(origin: str, destination_city: str, destination_country: str,
     )
 
     chat = model.start_chat(enable_automatic_function_calling=False)
-    response = chat.send_message(initial_message)
+
+    # Send initial message with retry on 429
+    import re, time as _time
+    for attempt in range(5):
+        try:
+            response = chat.send_message(initial_message)
+            break
+        except Exception as e:
+            err = str(e)
+            if "429" in err or "quota" in err.lower():
+                m = re.search(r'retry in ([\d.]+)s', err)
+                wait = float(m.group(1)) + 2 if m else 30 * (attempt + 1)
+                print(f"    ⏳  Rate limited on start. Waiting {wait:.0f}s...")
+                _time.sleep(wait)
+                if attempt == 4:
+                    raise
+            else:
+                raise
+
     step = 0
 
     print(f"\n🤖  Agent starting: {destination_city}, {destination_country}  ({start_date} → {end_date})")
@@ -470,7 +488,25 @@ def run_agent(origin: str, destination_city: str, destination_country: str,
                 )
             )
 
-        response = chat.send_message(tool_response_parts)
+        # Rate-limit safe: retry on 429 with backoff
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                response = chat.send_message(tool_response_parts)
+                break
+            except Exception as e:
+                err = str(e)
+                if "429" in err or "quota" in err.lower():
+                    import re, time
+                    # Try to parse suggested wait time from error message
+                    m = re.search(r'retry in ([\d.]+)s', err)
+                    wait = float(m.group(1)) + 2 if m else 30 * (attempt + 1)
+                    print(f"    ⏳  Rate limited. Waiting {wait:.0f}s before retry {attempt+1}/{max_retries}...")
+                    time.sleep(wait)
+                    if attempt == max_retries - 1:
+                        raise
+                else:
+                    raise
 
 
 # ══════════════════════════════════════════════════════════════════════════════
