@@ -282,12 +282,14 @@ transport_apps:
 restaurants:
   - 5 real, well-reviewed, mid-range restaurants in the destination city
   - Good for a business dinner or relaxed meal after a long day
-  - Each: name, cuisine type, estimated cost per person in USD, and why it's good
+  - Each: name, cuisine type, estimated cost per person in USD, approximate latitude/longitude coordinates, and why it's good
   - Avoid tourist traps. Prefer places that feel local and genuine.
 
 currency:
   - Local currency name, symbol, ISO code
-  - Rough exchange rate vs USD (approximate is fine)
+  - Exchange rate vs USD (approximate is fine)
+  - Exchange rate from the ORIGIN city's local currency to the destination currency (e.g. if origin is Tel Aviv, show ILS → destination currency rate)
+  - Include origin_currency_code (e.g. "ILS"), origin_currency_symbol (e.g. "₪"), and origin_rate (e.g. "1 ₪ ≈ 2.85 SEK")
   - Whether international credit cards (Visa/Mastercard) are widely accepted
   - Local tipping culture (percentage? not expected? rounding up?)
 
@@ -304,7 +306,7 @@ business_etiquette:
 attractions:
   - Top 5 things to see or do for someone with a free evening or morning
   - Keep it practical — walkable from city center or easy by public transit
-  - Include why each is worth seeing
+  - Each: name, type, approximate latitude/longitude coordinates, and why it's worth seeing
 
 airport_transfer:
   - Best way from the main international airport to city center
@@ -351,24 +353,27 @@ Return ONLY a single valid JSON object. No markdown fences, no explanatory prose
     {"name": "Black Cab (Gett)", "notes": "official London black cabs, reliable and metered"}
   ],
   "restaurants": [
-    {"name": "Brasserie Zédel", "cuisine": "French brasserie", "price_usd": "25-35", "notes": "Stunning Art Deco dining room in Piccadilly, excellent value, great for impressing guests without overspending."},
-    {"name": "Dishoom", "cuisine": "Indian", "price_usd": "20-30", "notes": "Consistently excellent, Bombay café atmosphere, popular with London professionals. Book ahead."},
-    {"name": "Flat Iron", "cuisine": "Steakhouse", "price_usd": "20-28", "notes": "No-frills but excellent quality steaks. Great for a relaxed post-meeting dinner."}
+    {"name": "Brasserie Zédel", "cuisine": "French brasserie", "price_usd": "25-35", "lat": 51.5098, "lon": -0.1344, "notes": "Stunning Art Deco dining room in Piccadilly, excellent value, great for impressing guests without overspending."},
+    {"name": "Dishoom", "cuisine": "Indian", "price_usd": "20-30", "lat": 51.5133, "lon": -0.1245, "notes": "Consistently excellent, Bombay café atmosphere, popular with London professionals. Book ahead."},
+    {"name": "Flat Iron", "cuisine": "Steakhouse", "price_usd": "20-28", "lat": 51.5115, "lon": -0.1307, "notes": "No-frills but excellent quality steaks. Great for a relaxed post-meeting dinner."}
   ],
   "currency": {
     "name": "British Pound Sterling",
     "symbol": "£",
     "code": "GBP",
     "approx_usd_rate": "1 GBP ≈ 1.27 USD",
+    "origin_currency_code": "ILS",
+    "origin_currency_symbol": "₪",
+    "origin_rate": "1 ₪ ≈ 0.22 GBP",
     "cards_accepted": "Cards accepted almost everywhere, contactless preferred",
     "tipping": "10-15% in restaurants if service charge not already included; round up for taxis"
   },
   "public_holidays": [],
   "business_etiquette": "Punctuality is crucial — being even 5 minutes late is noticed. Greet with a firm handshake and eye contact. Business cards are exchanged but without ceremony. Understatement is valued: avoid boasting about your company or product. Small talk before business is normal (weather, sports). Avoid discussing salary, politics, or religion. Thank-you emails after meetings are appreciated.",
   "attractions": [
-    {"name": "Tower of London & Tower Bridge", "type": "Historic landmark", "notes": "15 min walk from the City financial district. Iconic and worth seeing at dusk."},
-    {"name": "Tate Modern", "type": "Art museum", "notes": "Free entry, world-class modern art, great café with Thames views. Perfect for 2 hours."},
-    {"name": "Borough Market", "type": "Food market", "notes": "Best food market in London, open Thursdays–Saturdays. Perfect for a quick lunch or to bring back local gifts."}
+    {"name": "Tower of London & Tower Bridge", "type": "Historic landmark", "lat": 51.5081, "lon": -0.0759, "notes": "15 min walk from the City financial district. Iconic and worth seeing at dusk."},
+    {"name": "Tate Modern", "type": "Art museum", "lat": 51.5076, "lon": -0.0994, "notes": "Free entry, world-class modern art, great café with Thames views. Perfect for 2 hours."},
+    {"name": "Borough Market", "type": "Food market", "lat": 51.5055, "lon": -0.0910, "notes": "Best food market in London, open Thursdays–Saturdays. Perfect for a quick lunch or to bring back local gifts."}
   ],
   "airport_transfer": {
     "recommended": "Heathrow Express train to Paddington",
@@ -625,18 +630,21 @@ def generate_html(data: dict) -> str:
             meta = x.get("cuisine") or x.get("type", "")
             price = f" · ~${x.get('price_usd','')}/pp" if x.get("price_usd") else ""
             note = x.get("notes", "")
+            lat  = x.get("lat", "")
+            lon  = x.get("lon", "")
+            lat_attrs = f' data-lat="{lat}" data-lon="{lon}"' if lat and lon else ""
             h += (
                 f'<div class="poi">'
                 f'  <div class="poi-n">{i}</div>'
                 f'  <div class="poi-body">'
                 f'    <div class="poi-top">'
-                f'      <div>'
+                f'      <div style="flex:1;min-width:0">'
                 f'        <div class="poi-title">{nm}</div>'
                 f'        <div class="poi-meta">{meta}{price}'
                 + (f' <button class="expand-btn" onclick="toggleNote(\'{pid}\')" id="btn-{pid}">▾ more</button>' if note else '')
-                + f'      </div>'
+                + f'</div>'
                 f'      </div>'
-                f'      <button class="walk-btn" onclick="walkTo(\'{nm}, {dest_name}\')">🗺</button>'
+                f'      <button class="walk-btn" id="wb-{pid}" onclick="walkTo(\'{nm}, {dest_name}\')" {lat_attrs}>🗺</button>'
                 f'    </div>'
                 + (f'    <div class="poi-note" id="{pid}">{note}</div>' if note else '')
                 + f'  </div>'
@@ -711,7 +719,7 @@ body{
   overflow-x:auto;
 }
 .wx-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.3);white-space:nowrap;flex-shrink:0}
-.wc{border-radius:12px;padding:7px 11px;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.wc{border-radius:12px;padding:7px 11px;display:flex;align-items:center;gap:8px;flex:0 0 118px;min-height:64px}
 .wc-em{font-size:20px;line-height:1}
 .wc-day{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;opacity:.7}
 .wc-temps{font-size:15px;font-weight:900;line-height:1.1}
@@ -849,38 +857,88 @@ body{
 }
 """
 
-    js = """
-(function(){var s=localStorage.getItem('h');if(s)document.getElementById('hi').value=s})();
-function saveH(v){localStorage.setItem('h',v)}
-function walkTo(dest){
+    js = f"""
+var userLat=null,userLon=null,geoTimer=null;
+
+function haversineM(a,b,c,d){{
+  var R=6371000,p1=a*Math.PI/180,p2=c*Math.PI/180;
+  var dp=(c-a)*Math.PI/180,dl=(d-b)*Math.PI/180;
+  var x=Math.sin(dp/2)*Math.sin(dp/2)+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)*Math.sin(dl/2);
+  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}}
+
+function updateWalkTimes(){{
+  if(userLat===null)return;
+  document.querySelectorAll('.walk-btn[data-lat]').forEach(function(btn){{
+    var lat=parseFloat(btn.dataset.lat),lon=parseFloat(btn.dataset.lon);
+    if(!isNaN(lat)&&!isNaN(lon)){{
+      var dist=haversineM(userLat,userLon,lat,lon);
+      var mins=Math.max(1,Math.round(dist/80));
+      btn.innerHTML='🗺 '+mins+'m';
+    }}
+  }});
+}}
+
+function showLocBadge(msg){{
+  var b=document.getElementById('loc-badge');
+  if(b){{b.textContent=msg;b.style.display='block';}}
+}}
+
+function geocodeHotel(addr){{
+  var q=encodeURIComponent(addr+', {dest}');
+  fetch('https://nominatim.openstreetmap.org/search?q='+q+'&format=json&limit=1',{{headers:{{'Accept-Language':'en','User-Agent':'TripBrief/1.0'}}}})
+  .then(function(r){{return r.json();}})
+  .then(function(d){{
+    if(d&&d.length>0){{
+      userLat=parseFloat(d[0].lat);userLon=parseFloat(d[0].lon);
+      updateWalkTimes();showLocBadge('📍 Hotel location found');
+    }} else {{showLocBadge('⚠️ Hotel not found — check address');}}
+  }}).catch(function(){{}});
+}}
+
+function saveH(v){{
+  localStorage.setItem('h',v);
+  clearTimeout(geoTimer);
+  var badge=document.getElementById('loc-badge');
+  if(badge&&v.trim().length===0){{badge.style.display='none';}}
+  if(v.trim().length>4){{
+    if(badge){{badge.textContent='🔍 Finding location…';badge.style.display='block';}}
+    geoTimer=setTimeout(function(){{geocodeHotel(v);}},900);
+  }}
+}}
+
+function walkTo(dest){{
   var h=(document.getElementById('hi').value||'').trim();
-  if(!h){alert('Add your hotel address first.');document.getElementById('hi').focus();return}
-  window.open('https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(h)+'&destination='+encodeURIComponent(dest)+'&travelmode=walking','_blank')
-}
-function toggleNote(id){
+  var url='https://www.google.com/maps/dir/?api=1';
+  if(h)url+='&origin='+encodeURIComponent(h);
+  else if(userLat)url+='&origin='+userLat+','+userLon;
+  url+='&destination='+encodeURIComponent(dest)+'&travelmode=walking';
+  window.open(url,'_blank');
+}}
+
+function toggleNote(id){{
   var el=document.getElementById(id);
   var btn=document.getElementById('btn-'+id);
   if(!el)return;
   var open=el.classList.toggle('open');
   if(btn)btn.textContent=open?'▴ less':'▾ more';
-}
-document.addEventListener('change',function(e){
-  if(e.target.name==='co'){
-    var ci=document.getElementById('co_inp');
-    if(ci)ci.style.display=e.target.value==='__custom__'?'block':'none';
-  }
-});
-function navCo(){
-  var sel=document.querySelector('input[name=co]:checked');
-  var ci=document.getElementById('co_inp');
-  var dest='';
-  if(sel&&sel.value==='__custom__')dest=ci?ci.value.trim():'';
-  else if(sel)dest=sel.value;
-  else if(ci)dest=ci.value.trim();
-  if(!dest){alert('Select or enter a company address.');return}
-  var h=(document.getElementById('hi').value||'').trim();
-  window.open('https://www.google.com/maps/dir/?api=1'+(h?'&origin='+encodeURIComponent(h):'')+' &destination='+encodeURIComponent(dest)+'&travelmode=walking','_blank')
-}
+}}
+
+// On load: restore hotel & try GPS
+(function(){{
+  var s=localStorage.getItem('h');
+  if(s&&s.trim().length>0){{
+    document.getElementById('hi').value=s;
+    geocodeHotel(s);
+  }} else if(navigator.geolocation){{
+    navigator.geolocation.getCurrentPosition(function(pos){{
+      if(userLat===null){{
+        userLat=pos.coords.latitude;userLon=pos.coords.longitude;
+        updateWalkTimes();showLocBadge('📍 Using your GPS location');
+      }}
+    }},null,{{timeout:5000}});
+  }}
+}})();
 """
 
     H = []
@@ -912,7 +970,7 @@ function navCo(){
     # Key facts strip (horizontally scrollable on mobile)
     H.append(f"""<div class="facts-strip">
   <div class="kf"><div class="kf-label">⏰ Time</div><div class="kf-val">{dstr}</div><div class="kf-sub">{tz_to}</div></div>
-  <div class="kf"><div class="kf-label">💱 Currency</div><div class="kf-val">{cur.get("symbol","")} {cur.get("code","")}</div><div class="kf-sub">{cur.get("approx_usd_rate","")}</div></div>
+  <div class="kf"><div class="kf-label">💱 Currency</div><div class="kf-val">{cur.get("symbol","")} {cur.get("code","")}</div><div class="kf-sub">{cur.get("origin_rate", cur.get("approx_usd_rate",""))}</div></div>
   <div class="kf"><div class="kf-label">🔌 Outlet</div><div class="kf-val">Type {", ".join(otypes)}</div><div class="kf-sub">{outlet.get("voltage","")}</div></div>
   <div class="kf"><div class="kf-label">🔄 Adapter</div><div class="kf-val">{"⚠️ Needed" if adapter else "✅ No"}</div></div>
   <div class="kf"><div class="kf-label">💳 Cards</div><div class="kf-val" style="font-size:12px">{cur.get("cards_accepted","")}</div></div>
@@ -928,13 +986,8 @@ function navCo(){
     H.append(f'''<div class="card"><div class="sec">
   <div class="sh"><div class="sh-ico ico-green">🏨</div><span class="sh-label">Your Hotel</span></div>
   <input type="text" id="hi" class="glass-inp" placeholder="Hotel name or address…" oninput="saveH(this.value)">
-  <div class="inp-hint">Used as start for all walking directions</div>
-</div></div>''')
-
-    H.append(f'''<div class="card"><div class="sec">
-  <div class="sh"><div class="sh-ico ico-amber">🏢</div><span class="sh-label">Company</span></div>
-  {co_opts}
-  <button class="nav-btn" onclick="navCo()">📍 Get Directions</button>
+  <div id="loc-badge" style="display:none;font-size:11px;color:#34d399;margin-top:6px;font-weight:600"></div>
+  <div class="inp-hint">Walking times update automatically when hotel is set</div>
 </div></div>''')
 
     H.append(f'''<div class="card"><div class="sec">
@@ -945,7 +998,7 @@ function navCo(){
     H.append(f'''<div class="card"><div class="sec">
   <div class="sh"><div class="sh-ico ico-cyan">💰</div><span class="sh-label">Currency & Payments</span></div>
   <div class="stat-big">{cur.get("symbol","")} {cur.get("code","")}</div>
-  <div class="stat-sub">{cur.get("name","")} · {cur.get("approx_usd_rate","")}</div>
+  <div class="stat-sub">{cur.get("name","")} · {cur.get("origin_rate", cur.get("approx_usd_rate",""))}</div>
   <div class="stat-tags">
     <span class="stag">💳 {cur.get("cards_accepted","")}</span>
     <span class="stag">🤝 {cur.get("tipping","")}</span>
@@ -954,22 +1007,7 @@ function navCo(){
 
     H.append('</div>')  # /left col
 
-    # MIDDLE col
-    H.append('<div class="col">')
-
-    H.append(f'''<div class="card"><div class="sec">
-  <div class="sh"><div class="sh-ico ico-orange">🍽️</div><span class="sh-label">Restaurants</span></div>
-  {poi_rows(rests, dest)}
-</div></div>''')
-
-    H.append(f'''<div class="card"><div class="sec">
-  <div class="sh"><div class="sh-ico ico-blue">🗺️</div><span class="sh-label">Attractions</span></div>
-  {poi_rows(attr, dest)}
-</div></div>''')
-
-    H.append('</div>')  # /middle col
-
-    # RIGHT col
+    # MIDDLE col — practical info
     H.append('<div class="col">')
 
     H.append(f'''<div class="card"><div class="sec">
@@ -983,7 +1021,6 @@ function navCo(){
     <div style="display:flex;gap:8px;flex-shrink:0">{outlet_html}</div>
     <div class="plug-meta">
       <div class="plug-v">{outlet.get("voltage","")}</div>
-      <div class="plug-note">{outlet.get("notes","")}</div>
       <span class="badge {'b-warn' if adapter else 'b-ok'}">{"⚠️ Adapter needed" if adapter else "✅ No adapter"}</span>
     </div>
   </div>
@@ -1007,6 +1044,21 @@ function navCo(){
     H.append(f'''<div class="card"><div class="sec">
   <div class="sh"><div class="sh-ico ico-lime">📅</div><span class="sh-label">Public Holidays</span></div>
   {hol_html}
+</div></div>''')
+
+    H.append('</div>')  # /middle col
+
+    # RIGHT col — restaurants & attractions
+    H.append('<div class="col">')
+
+    H.append(f'''<div class="card"><div class="sec">
+  <div class="sh"><div class="sh-ico ico-orange">🍽️</div><span class="sh-label">Restaurants</span></div>
+  {poi_rows(rests, dest)}
+</div></div>''')
+
+    H.append(f'''<div class="card"><div class="sec">
+  <div class="sh"><div class="sh-ico ico-blue">🗺️</div><span class="sh-label">Attractions</span></div>
+  {poi_rows(attr, dest)}
 </div></div>''')
 
     H.append('</div>')  # /right col
