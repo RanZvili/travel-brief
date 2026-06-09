@@ -406,7 +406,7 @@ def run_agent(origin: str, destination_city: str, destination_country: str,
     genai.configure(api_key=api_key)
 
     model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash-latest",
+        model_name="gemini-2.5-flash",
         system_instruction=SYSTEM_PROMPT,
         tools=[GEMINI_TOOLS],
         generation_config={"temperature": 0.1},
