@@ -333,16 +333,16 @@ def run_job(job_id, origin, destination_city, destination_country, start_date, e
         )
         return generate_html(data)
 
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = ex.submit(_work)
+    ex.shutdown(wait=False)  # don't block — let the thread run independently
     try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-            future = ex.submit(_work)
-            try:
-                html = future.result(timeout=TIMEOUT)
-                with jobs_lock:
-                    jobs[job_id] = {"status": "done", "result": html}
-            except concurrent.futures.TimeoutError:
-                with jobs_lock:
-                    jobs[job_id] = {"status": "error", "result": "Timed out after 4 minutes. Please try again — rate limits may be the cause."}
+        html = future.result(timeout=TIMEOUT)
+        with jobs_lock:
+            jobs[job_id] = {"status": "done", "result": html}
+    except concurrent.futures.TimeoutError:
+        with jobs_lock:
+            jobs[job_id] = {"status": "error", "result": "Timed out after 4 minutes — Gemini API is too slow right now. Please try again in a moment."}
     except Exception as e:
         with jobs_lock:
             jobs[job_id] = {"status": "error", "result": str(e)}
