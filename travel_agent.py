@@ -953,7 +953,7 @@ function enablePOIButtons(label){{
 function renderPOI(type,items){{
   var container=document.getElementById('poi-'+type);
   if(!items||items.length===0){{
-    container.innerHTML='<div class="poi-hint" style="color:rgba(255,150,150,0.8)">No results found.<br><button class="poi-reload" onclick="reloadPOI(\''+type+'\')">Try again</button></div>';
+    container.innerHTML='<div class="poi-hint" style="color:rgba(255,150,150,0.8)">No results found.<br><button class="poi-reload" onclick="reloadPOI(&quot;'+type+'&quot;)">Try again</button></div>';
     return;
   }}
   if(userLat!==null){{
@@ -973,14 +973,14 @@ function renderPOI(type,items){{
     h+='<div class="poi"><div class="poi-top"><div style="flex:1;min-width:0">';
     h+='<div class="poi-title-row"><span class="poi-n">'+(i+1)+'</span><span class="poi-title">'+it.name+'</span></div>';
     h+='<div class="poi-meta">'+meta+price+distLabel;
-    if(it.notes){{h+=' <button class="expand-btn" id="btn-'+pid+'" onclick="toggleNote(\''+pid+'\')">▾ more</button>';}}
+    if(it.notes){{h+=' <button class="expand-btn" id="btn-'+pid+'" onclick="toggleNote(&quot;'+pid+'&quot;)">▾ more</button>';}}
     h+='</div></div>';
     if(destCoord){{h+='<button class="walk-btn" data-dest="'+destCoord+'" onclick="walkTo(this)">🗺</button>';}}
     h+='</div>';
     if(it.notes){{h+='<div class="poi-note" id="'+pid+'">'+it.notes+'</div>';}}
     h+='</div>';
   }});
-  h+='<button class="poi-reload" onclick="reloadPOI(\''+type+'\')">↺ Reload</button>';
+  h+='<button class="poi-reload" onclick="reloadPOI(&quot;'+type+'&quot;)">↺ Reload</button>';
   container.innerHTML=h;
   var otherId=type==='restaurants'?'load-attractions':'load-restaurants';
   var otherBtn=document.getElementById(otherId);
@@ -1013,7 +1013,7 @@ function loadPOI(type){{
     poiLoading=false;
     if(rb)rb.disabled=false;
     if(ab)ab.disabled=false;
-    document.getElementById('poi-'+type).innerHTML='<div class="poi-hint" style="color:rgba(255,150,150,0.8)">Failed to load.<br><button class="poi-reload" onclick="reloadPOI(\''+type+'\')">Try again</button></div>';
+    document.getElementById('poi-'+type).innerHTML='<div class="poi-hint" style="color:rgba(255,150,150,0.8)">Failed to load.<br><button class="poi-reload" onclick="reloadPOI(&quot;'+type+'&quot;)">Try again</button></div>';
   }});
 }}
 
