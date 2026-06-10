@@ -432,15 +432,12 @@ def run_agent(origin: str, destination_city: str, destination_country: str,
 
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.5-flash:generateContent?key={api_key}"
+        f"gemini-2.5-flash-lite:generateContent?key={api_key}"
     )
     payload = {
         "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
         "contents": [{"parts": [{"text": message}]}],
-        "generationConfig": {
-            "temperature": 0.1,
-            "thinkingConfig": {"thinkingBudget": 0},  # disable thinking → fast
-        },
+        "generationConfig": {"temperature": 0.1},
     }
 
     response_text = None

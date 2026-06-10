@@ -429,9 +429,10 @@ def start():
     if not all([origin, destination_city, destination_country, start_date, end_date]):
         return jsonify({"error": "Missing required fields"}), 400
 
+    import time as _time
     job_id = str(uuid.uuid4())
     with jobs_lock:
-        jobs[job_id] = {"status": "pending", "result": None}
+        jobs[job_id] = {"status": "pending", "result": None, "started_at": _time.time()}
 
     t = threading.Thread(
         target=run_job,
@@ -443,13 +444,26 @@ def start():
     return jsonify({"job_id": job_id})
 
 
-@app.route('/models')
-def list_models():
-    import google.generativeai as genai
-    api_key = os.environ.get("GEMINI_API_KEY")
-    genai.configure(api_key=api_key)
-    names = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
-    return "<br>".join(names)
+@app.route('/test')
+def test_gemini():
+    """Quick test: call Gemini directly and return raw result. Visit /test in browser."""
+    import requests as req, time as _t
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        return "ERROR: GEMINI_API_KEY not set", 500
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={api_key}"
+    payload = {
+        "contents": [{"parts": [{"text": "Reply with exactly: OK"}]}],
+        "generationConfig": {"temperature": 0},
+    }
+    t0 = _t.time()
+    try:
+        r = req.post(url, json=payload, timeout=30)
+        elapsed = round(_t.time() - t0, 1)
+        return f"HTTP {r.status_code} in {elapsed}s<br><pre>{r.text[:2000]}</pre>"
+    except Exception as e:
+        elapsed = round(_t.time() - t0, 1)
+        return f"ERROR after {elapsed}s: {e}", 500
 
 
 @app.route('/status/<job_id>')
