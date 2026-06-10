@@ -520,6 +520,24 @@ def poi():
         return jsonify({'error': str(e), 'items': []}), 500
 
 
+@app.route('/geocode')
+def geocode():
+    """Proxy Nominatim search so browser CORS/User-Agent issues are avoided."""
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify([])
+    try:
+        r = requests.get(
+            'https://nominatim.openstreetmap.org/search',
+            params={'q': q, 'format': 'json', 'limit': 5, 'addressdetails': 0},
+            headers={'User-Agent': 'TripBrief/1.0', 'Accept-Language': 'en'},
+            timeout=8
+        )
+        return jsonify(r.json())
+    except Exception:
+        return jsonify([])
+
+
 @app.route('/test')
 def test_gemini():
     """Quick test: call Gemini directly and return raw result. Visit /test in browser."""

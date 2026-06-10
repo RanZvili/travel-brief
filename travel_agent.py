@@ -836,7 +836,7 @@ function showLocBadge(msg){{
 
 function geocodeHotel(addr){{
   var q=encodeURIComponent(addr+', {dest}');
-  fetch('https://nominatim.openstreetmap.org/search?q='+q+'&format=json&limit=1')
+  fetch('/geocode?q='+q)
   .then(function(r){{return r.json();}})
   .then(function(d){{
     if(d&&d.length>0){{
@@ -868,7 +868,7 @@ function onLocInput(v){{
 }}
 
 function fetchSuggestions(q){{
-  var url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q+', {dest}')+'&format=json&limit=5&addressdetails=0';
+  var url='/geocode?q='+encodeURIComponent(q+', {dest}');
   fetch(url)
   .then(function(r){{return r.json();}})
   .then(function(data){{
@@ -1031,7 +1031,7 @@ function toggleNote(id){{
   if(s&&s.trim().length>0){{
     var inp=document.getElementById('hi');
     if(inp)inp.value=s;
-    var url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(s+', {dest}')+'&format=json&limit=1';
+    var url='/geocode?q='+encodeURIComponent(s+', {dest}');
     fetch(url)
     .then(function(r){{return r.json();}})
     .then(function(d){{
