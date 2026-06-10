@@ -890,6 +890,21 @@ function autoGeocode(q){{
   }});
 }}
 
+function useGPS(){{
+  if(!navigator.geolocation){{showLocBadge('⚠️ GPS not available');return;}}
+  showLocBadge('📡 Getting GPS…');
+  navigator.geolocation.getCurrentPosition(function(pos){{
+    userLat=pos.coords.latitude;userLon=pos.coords.longitude;
+    var inp=document.getElementById('hi');
+    if(inp)inp.value='';
+    localStorage.removeItem('h');
+    updateWalkTimes();showLocBadge('📍 Using your GPS location');
+    enablePOIButtons('Nearby');
+  }},function(){{
+    showLocBadge('⚠️ GPS denied — type your location');
+  }},{{enableHighAccuracy:true,timeout:10000}});
+}}
+
 function walkTo(btn){{
   var dest=btn.getAttribute('data-dest')||'';
   var url='https://www.google.com/maps/dir/?api=1';
@@ -1072,11 +1087,11 @@ function toggleNote(id){{
     H.append(f'''<div class="card"><div class="sec">
   <div class="sh"><div class="sh-ico ico-green">📍</div><span class="sh-label">Your Location</span></div>
   <div class="loc-wrap">
-    <input type="text" id="hi" class="glass-inp" placeholder="Hotel, office or address…" autocomplete="off" oninput="onLocInput(this.value)">
-    
+    <input type="text" id="hi" class="glass-inp" placeholder="Hotel, office or address…" autocomplete="off" oninput="onLocInput(this.value)" style="padding-right:44px">
+    <button onclick="useGPS()" title="Use my current location" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:20px;line-height:1;padding:4px">&#x1F4CD;</button>
   </div>
   <div id="loc-badge" style="display:none;font-size:11px;color:#34d399;margin-top:6px;font-weight:600"></div>
-  <div class="inp-hint">Defaults to GPS · type to search hotels, offices or addresses</div>
+  <div class="inp-hint">Type to search · tap 📍 to use GPS</div>
 </div></div>''')
 
     H.append(f'''<div class="card"><div class="sec">
