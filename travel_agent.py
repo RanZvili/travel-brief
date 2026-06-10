@@ -385,133 +385,85 @@ Return ONLY a single valid JSON object. No markdown fences, no explanatory prose
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SECTION 5: AGENT LOOP
-# This is where the "intelligence" happens.
-# Claude decides which tools to call, calls them, reads the results,
-# and repeats until it has everything it needs to write the final brief.
+# SECTION 5: AGENT — pre-fetch data, then single Gemini call
 # ══════════════════════════════════════════════════════════════════════════════
 
 def run_agent(origin: str, destination_city: str, destination_country: str,
               start_date: str, end_date: str, company_name: str = "") -> dict:
     """
-    Runs the Gemini agent loop:
-      1. Send the trip details to Gemini
-      2. Gemini calls a tool → we run it → send result back
-      3. Repeat until Gemini returns plain text (the JSON brief)
+    1. Pre-fetch weather + timezone data directly (no Gemini needed for this)
+    2. Send everything to Gemini in ONE message → it returns the full JSON brief
+    This avoids multiple round-trips and rate-limit issues.
     """
+    import re, time as _time
+
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        print("\n❌  GEMINI_API_KEY is not set.")
-        print("    Get your free key at https://aistudio.google.com/app/apikey")
-        print("    Then set it:")
-        print("      Mac/Linux:  export GEMINI_API_KEY=AIza...")
-        print("      Windows:    set GEMINI_API_KEY=AIza...")
-        sys.exit(1)
+        raise ValueError("GEMINI_API_KEY environment variable is not set.")
 
+    # ── Step 1: pre-fetch real data ──────────────────────────────────────────
+    print(f"\n🌍  Pre-fetching data for {destination_city}, {destination_country}...")
+
+    origin_country  = origin.split(",")[-1].strip() if "," in origin else ""
+    origin_city     = origin.split(",")[0].strip()
+
+    weather_data  = get_weather_forecast(destination_city, destination_country, start_date, end_date)
+    tz_dest       = get_timezone_info(destination_city, destination_country)
+    tz_origin     = get_timezone_info(origin_city, origin_country or origin)
+
+    print("    ✅  Weather and timezone data fetched")
+
+    # ── Step 2: single Gemini call ───────────────────────────────────────────
     genai.configure(api_key=api_key)
-
     model = genai.GenerativeModel(
         model_name="gemini-2.5-flash",
         system_instruction=SYSTEM_PROMPT,
-        tools=[GEMINI_TOOLS],
         generation_config={"temperature": 0.1},
     )
 
-    initial_message = (
-        f"Please create a complete travel brief for:\n"
+    message = (
+        f"Create a complete travel brief. Here is the pre-fetched real-time data:\n\n"
+        f"TRIP:\n"
         f"  Origin:      {origin}\n"
         f"  Destination: {destination_city}, {destination_country}\n"
         f"  Dates:       {start_date} to {end_date}\n"
         + (f"  Company:     {company_name}\n" if company_name else "")
-        + f"\nStart by calling get_timezone_info for both cities, then get_weather_forecast "
-          f"for the destination, then compile the full JSON travel brief."
+        + f"\nWEATHER FORECAST (real data):\n{json.dumps(weather_data, indent=2)}\n"
+        f"\nDESTINATION TIMEZONE (real data):\n{json.dumps(tz_dest, indent=2)}\n"
+        f"\nORIGIN TIMEZONE (real data):\n{json.dumps(tz_origin, indent=2)}\n"
+        f"\nUsing the above real data plus your own knowledge, return the complete JSON travel brief now. "
+        f"Do NOT call any tools — all real-time data is already provided above."
     )
 
-    chat = model.start_chat(enable_automatic_function_calling=False)
-
-    # Send initial message with retry on 429
-    import re, time as _time
-    for attempt in range(5):
+    # Retry on 429
+    for attempt in range(6):
         try:
-            response = chat.send_message(initial_message)
+            response = model.generate_content(message)
             break
         except Exception as e:
             err = str(e)
             if "429" in err or "quota" in err.lower():
                 m = re.search(r'retry in ([\d.]+)s', err)
                 wait = float(m.group(1)) + 2 if m else 30 * (attempt + 1)
-                print(f"    ⏳  Rate limited on start. Waiting {wait:.0f}s...")
+                print(f"    ⏳  Rate limited. Waiting {wait:.0f}s (attempt {attempt+1}/6)...")
                 _time.sleep(wait)
-                if attempt == 4:
+                if attempt == 5:
                     raise
             else:
                 raise
 
-    step = 0
-
-    print(f"\n🤖  Agent starting: {destination_city}, {destination_country}  ({start_date} → {end_date})")
-
-    while True:
-        step += 1
-        print(f"    Step {step}: Gemini thinking...")
-
-        # Collect any function calls from the response
-        fc_parts = []
-        for part in response.parts:
-            try:
-                if part.function_call.name:
-                    fc_parts.append(part.function_call)
-            except AttributeError:
-                pass
-
-        if not fc_parts:
-            # No function calls — Gemini is done, extract the JSON
-            text = response.text.strip()
-            if text.startswith("```"):
-                parts = text.split("```")
-                text = parts[1] if len(parts) > 1 else text
-                if text.startswith("json"):
-                    text = text[4:].strip()
-            start_idx = text.find("{")
-            end_idx   = text.rfind("}") + 1
-            if start_idx >= 0 and end_idx > start_idx:
-                return json.loads(text[start_idx:end_idx])
-            raise ValueError("Agent finished but no JSON found in the response.")
-
-        # Execute each tool call
-        tool_response_parts = []
-        for fc in fc_parts:
-            print(f"    🔧  Calling: {fc.name}({dict(fc.args)})")
-            result_str = dispatch_tool(fc.name, dict(fc.args))
-            print(f"    ✅  {fc.name} returned data")
-            tool_response_parts.append(
-                genai.protos.Part(
-                    function_response=genai.protos.FunctionResponse(
-                        name=fc.name,
-                        response={"result": result_str}
-                    )
-                )
-            )
-
-        # Rate-limit safe: retry on 429 with backoff
-        max_retries = 5
-        for attempt in range(max_retries):
-            try:
-                response = chat.send_message(tool_response_parts)
-                break
-            except Exception as e:
-                err = str(e)
-                if "429" in err or "quota" in err.lower():
-                    import re, time
-                    # Try to parse suggested wait time from error message
-                    m = re.search(r'retry in ([\d.]+)s', err)
-                    wait = float(m.group(1)) + 2 if m else 30 * (attempt + 1)
-                    print(f"    ⏳  Rate limited. Waiting {wait:.0f}s before retry {attempt+1}/{max_retries}...")
-                    time.sleep(wait)
-                    if attempt == max_retries - 1:
-                        raise
-                else:
-                    raise
+    # ── Step 3: parse JSON from response ────────────────────────────────────
+    text = response.text.strip()
+    if text.startswith("```"):
+        parts = text.split("```")
+        text = parts[1] if len(parts) > 1 else text
+        if text.startswith("json"):
+            text = text[4:].strip()
+    start_idx = text.find("{")
+    end_idx   = text.rfind("}") + 1
+    if start_idx >= 0 and end_idx > start_idx:
+        return json.loads(text[start_idx:end_idx])
+    raise ValueError(f"No JSON found in Gemini response. Raw: {text[:300]}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
