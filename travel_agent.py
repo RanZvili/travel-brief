@@ -279,12 +279,6 @@ transport_apps:
   - Which ride-hailing or taxi apps are most used in that city
   - Note if Uber works there or if a local alternative is better (Bolt, Gett, Grab, Ola, DiDi, Careem, etc.)
 
-restaurants:
-  - 5 real, well-reviewed, mid-range restaurants in the destination city
-  - Good for a business dinner or relaxed meal after a long day
-  - Each: name, cuisine type, estimated cost per person in USD, approximate latitude/longitude coordinates, and why it's good
-  - Avoid tourist traps. Prefer places that feel local and genuine.
-
 currency:
   - Local currency name, symbol, ISO code
   - Exchange rate vs USD (approximate is fine)
@@ -302,11 +296,6 @@ business_etiquette:
   - 4-6 cultural norms that matter when meeting insurance/financial executives in that country
   - Cover: punctuality, greeting style, business card customs (if relevant), formality level,
     topics to avoid, anything that makes a strong first impression
-
-attractions:
-  - Top 5 things to see or do for someone with a free evening or morning
-  - Keep it practical — walkable from city center or easy by public transit
-  - Each: name, type, approximate latitude/longitude coordinates, and why it's worth seeing
 
 airport_transfer:
   - Best way from the main international airport to city center
@@ -353,11 +342,6 @@ Return ONLY a single valid JSON object. No markdown fences, no explanatory prose
     {"name": "Bolt", "notes": "often cheaper than Uber"},
     {"name": "Black Cab (Gett)", "notes": "official London black cabs, reliable and metered"}
   ],
-  "restaurants": [
-    {"name": "Brasserie Zédel", "cuisine": "French brasserie", "price_usd": "25-35", "lat": 51.5098, "lon": -0.1344, "notes": "Stunning Art Deco dining room in Piccadilly, excellent value, great for impressing guests without overspending."},
-    {"name": "Dishoom", "cuisine": "Indian", "price_usd": "20-30", "lat": 51.5133, "lon": -0.1245, "notes": "Consistently excellent, Bombay café atmosphere, popular with London professionals. Book ahead."},
-    {"name": "Flat Iron", "cuisine": "Steakhouse", "price_usd": "20-28", "lat": 51.5115, "lon": -0.1307, "notes": "No-frills but excellent quality steaks. Great for a relaxed post-meeting dinner."}
-  ],
   "currency": {
     "name": "British Pound Sterling",
     "symbol": "£",
@@ -371,11 +355,6 @@ Return ONLY a single valid JSON object. No markdown fences, no explanatory prose
   },
   "public_holidays": [],
   "business_etiquette": "Punctuality is crucial — being even 5 minutes late is noticed. Greet with a firm handshake and eye contact. Business cards are exchanged but without ceremony. Understatement is valued: avoid boasting about your company or product. Small talk before business is normal (weather, sports). Avoid discussing salary, politics, or religion. Thank-you emails after meetings are appreciated.",
-  "attractions": [
-    {"name": "Tower of London & Tower Bridge", "type": "Historic landmark", "lat": 51.5081, "lon": -0.0759, "notes": "15 min walk from the City financial district. Iconic and worth seeing at dusk."},
-    {"name": "Tate Modern", "type": "Art museum", "lat": 51.5076, "lon": -0.0994, "notes": "Free entry, world-class modern art, great café with Thames views. Perfect for 2 hours."},
-    {"name": "Borough Market", "type": "Food market", "lat": 51.5055, "lon": -0.0910, "notes": "Best food market in London, open Thursdays–Saturdays. Perfect for a quick lunch or to bring back local gifts."}
-  ],
   "airport_transfer": {
     "airport_name": "Heathrow Airport",
     "recommended": "Heathrow Express train to Paddington",
@@ -556,8 +535,6 @@ def generate_html(data: dict) -> str:
     )
 
     cur   = data.get("currency", {})
-    rests = data.get("restaurants", [])
-    attr  = data.get("attractions", [])
     trans = data.get("transport_apps", [])
     hols  = data.get("public_holidays", [])
     apt   = data.get("airport_transfer", {})
@@ -582,39 +559,6 @@ def generate_html(data: dict) -> str:
             + (f'<div class="wc-rain">🌧 {rain}mm</div>' if rain > 0.5 else '')
             + f'</div></div>'
         )
-
-    # POI rows — name + purple meta always visible, gray note collapsible
-    poi_counter = [0]
-    def poi_rows(items, dest_name):
-        h = ""
-        for i, x in enumerate(items, 1):
-            poi_counter[0] += 1
-            pid  = f"poi{poi_counter[0]}"
-            nm   = x.get("name", "")
-            meta = x.get("cuisine") or x.get("type", "")
-            price = f" · ~${x.get('price_usd','')}/pp" if x.get("price_usd") else ""
-            note = x.get("notes", "")
-            lat  = x.get("lat", "")
-            lon  = x.get("lon", "")
-            lat_attrs = f' data-lat="{lat}" data-lon="{lon}"' if lat and lon else ""
-            h += (
-                f'<div class="poi">'
-                f'  <div class="poi-top">'
-                f'    <div style="flex:1;min-width:0">'
-                f'      <div class="poi-title-row">'
-                f'        <span class="poi-n">{i}</span>'
-                f'        <span class="poi-title">{nm}</span>'
-                f'      </div>'
-                f'      <div class="poi-meta">{meta}{price}'
-                + (f' <button class="expand-btn" onclick="toggleNote(\'{pid}\')" id="btn-{pid}">▾ more</button>' if note else '')
-                + f'</div>'
-                f'    </div>'
-                f'    <button class="walk-btn" id="wb-{pid}" onclick="walkTo(\'{nm}, {dest_name}\')" {lat_attrs}>🗺</button>'
-                f'  </div>'
-                + (f'  <div class="poi-note" id="{pid}">{note}</div>' if note else '')
-                + f'</div>'
-            )
-        return h
 
     trans_html = "".join(f'<span class="tpill">{t.get("name","")}</span>' for t in trans)
 
@@ -774,6 +718,16 @@ body{
 .walk-btn{flex-shrink:0;background:rgba(255,255,255,0.08);border:1.5px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.8);border-radius:10px;padding:8px 12px;font-size:16px;cursor:pointer;line-height:1}
 .walk-btn:hover,.walk-btn:active{background:rgba(168,85,247,0.3)}
 
+/* ─── LAZY POI ─── */
+.poi-placeholder{padding:4px 0 8px 0}
+.poi-hint{font-size:12px;color:rgba(255,255,255,0.35);margin-bottom:12px;font-weight:500;line-height:1.5}
+.poi-load-btn{width:100%;background:linear-gradient(135deg,rgba(168,85,247,0.25),rgba(59,130,246,0.25));border:1.5px solid rgba(168,85,247,0.35);color:#fff;border-radius:12px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:.2s}
+.poi-load-btn:hover:not(:disabled){background:linear-gradient(135deg,rgba(168,85,247,0.45),rgba(59,130,246,0.45))}
+.poi-load-btn:disabled{opacity:.35;cursor:not-allowed}
+.poi-loading{text-align:center;padding:24px 0;color:rgba(255,255,255,0.45);font-size:13px;font-weight:600}
+.poi-reload{background:none;border:none;color:rgba(168,85,247,0.6);font-size:11px;font-weight:700;cursor:pointer;padding:8px 0 2px 0;font-family:'Inter',sans-serif;display:block}
+.poi-reload:hover{color:#a855f7}
+
 /* ─── PLUG ─── */
 .plug-row{display:flex;align-items:center;gap:16px}
 .plug{text-align:center;flex-shrink:0}
@@ -827,6 +781,8 @@ body{
 
     js = f"""
 var userLat=null,userLon=null,geoTimer=null;
+var DEST_INFO='{dest}';
+var poiLoading=false;
 
 function haversineM(a,b,c,d){{
   var R=6371000,p1=a*Math.PI/180,p2=c*Math.PI/180;
@@ -860,6 +816,7 @@ function geocodeHotel(addr){{
     if(d&&d.length>0){{
       userLat=parseFloat(d[0].lat);userLon=parseFloat(d[0].lon);
       updateWalkTimes();showLocBadge('📍 Hotel location found');
+      enablePOIButtons('Near hotel');
     }} else {{showLocBadge('⚠️ Hotel not found — check address');}}
   }}).catch(function(){{}});
 }}
@@ -875,19 +832,102 @@ function saveH(v){{
   }}
 }}
 
-function walkTo(dest){{
+function walkTo(btn){{
+  var dest=btn.getAttribute('data-dest')||'';
   var h=(document.getElementById('hi').value||'').trim();
   var url='https://www.google.com/maps/dir/?api=1';
-  if(h)url+='&origin='+encodeURIComponent(h);
-  else if(userLat)url+='&origin='+userLat+','+userLon;
-  url+='&destination='+encodeURIComponent(dest)+'&travelmode=walking';
+  if(h) url+='&origin='+encodeURIComponent(h);
+  else if(userLat) url+='&origin='+userLat+','+userLon;
+  if(dest&&dest!==',' ) url+='&destination='+encodeURIComponent(dest);
+  url+='&travelmode=walking';
   window.open(url,'_blank');
 }}
 
-function airportNav(airport, city){{
+function airportNav(btn){{
+  var airport=btn.getAttribute('data-airport')||'';
+  var city=btn.getAttribute('data-city')||'';
   var h=(document.getElementById('hi').value||'').trim();
-  var dest=h||city+' city center';
-  window.open('https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(airport)+'&destination='+encodeURIComponent(dest)+'&travelmode=transit','_blank');
+  var dest=h||(city+' city center');
+  var url='https://www.google.com/maps/dir/?api=1&travelmode=transit';
+  if(airport) url+='&origin='+encodeURIComponent(airport);
+  url+='&destination='+encodeURIComponent(dest);
+  window.open(url,'_blank');
+}}
+
+function enablePOIButtons(label){{
+  ['restaurants','attractions'].forEach(function(t){{
+    var btn=document.getElementById('load-'+t);
+    var hint=document.getElementById('hint-'+t);
+    if(btn&&btn.disabled){{btn.disabled=false;}}
+    if(hint){{hint.textContent='📍 '+label+' — tap to load';}}
+  }});
+}}
+
+function renderPOI(type,items){{
+  var container=document.getElementById('poi-'+type);
+  if(!items||items.length===0){{
+    container.innerHTML='<div class="poi-hint" style="color:rgba(255,150,150,0.8)">No results found.<br><button class="poi-reload" onclick="reloadPOI(\''+type+'\')">Try again</button></div>';
+    return;
+  }}
+  if(userLat!==null){{
+    items.forEach(function(it){{
+      it._dist=(it.lat&&it.lon)?haversineM(userLat,userLon,it.lat,it.lon):999999;
+    }});
+    items.sort(function(a,b){{return a._dist-b._dist;}});
+  }}
+  var h='';
+  items.forEach(function(it,i){{
+    var meta=it.cuisine||it.type||'';
+    var price=it.price_usd?' · ~$'+it.price_usd+'/pp':'';
+    var destCoord=(it.lat&&it.lon)?(it.lat+','+it.lon):'';
+    var distLabel='';
+    if(userLat!==null&&it._dist<999999){{var mins=Math.max(1,Math.round(it._dist/80));distLabel=' · 🚶 '+mins+'m';}}
+    var pid='lpoi'+(i+1)+'t'+type;
+    h+='<div class="poi"><div class="poi-top"><div style="flex:1;min-width:0">';
+    h+='<div class="poi-title-row"><span class="poi-n">'+(i+1)+'</span><span class="poi-title">'+it.name+'</span></div>';
+    h+='<div class="poi-meta">'+meta+price+distLabel;
+    if(it.notes){{h+=' <button class="expand-btn" id="btn-'+pid+'" onclick="toggleNote(\''+pid+'\')">▾ more</button>';}}
+    h+='</div></div>';
+    if(destCoord){{h+='<button class="walk-btn" data-dest="'+destCoord+'" onclick="walkTo(this)">🗺</button>';}}
+    h+='</div>';
+    if(it.notes){{h+='<div class="poi-note" id="'+pid+'">'+it.notes+'</div>';}}
+    h+='</div>';
+  }});
+  h+='<button class="poi-reload" onclick="reloadPOI(\''+type+'\')">↺ Reload</button>';
+  container.innerHTML=h;
+  var otherId=type==='restaurants'?'load-attractions':'load-restaurants';
+  var otherBtn=document.getElementById(otherId);
+  if(otherBtn)otherBtn.disabled=false;
+}}
+
+function reloadPOI(type){{
+  if(poiLoading)return;
+  document.getElementById('poi-'+type).innerHTML='';
+  loadPOI(type);
+}}
+
+function loadPOI(type){{
+  if(poiLoading)return;
+  poiLoading=true;
+  var rb=document.getElementById('load-restaurants');
+  var ab=document.getElementById('load-attractions');
+  if(rb)rb.disabled=true;
+  if(ab)ab.disabled=true;
+  document.getElementById('poi-'+type).innerHTML='<div class="poi-loading">⏳ Loading…</div>';
+  var hotel=(document.getElementById('hi').value||'').trim();
+  fetch('/poi',{{method:'POST',headers:{{'Content-Type':'application/json'}},
+    body:JSON.stringify({{type:type,destination:DEST_INFO,lat:userLat,lon:userLon,hotel:hotel}})}})
+  .then(function(r){{return r.json();}})
+  .then(function(d){{
+    poiLoading=false;
+    renderPOI(type,d.items||[]);
+  }})
+  .catch(function(){{
+    poiLoading=false;
+    if(rb)rb.disabled=false;
+    if(ab)ab.disabled=false;
+    document.getElementById('poi-'+type).innerHTML='<div class="poi-hint" style="color:rgba(255,150,150,0.8)">Failed to load.<br><button class="poi-reload" onclick="reloadPOI(\''+type+'\')">Try again</button></div>';
+  }});
 }}
 
 function toggleNote(id){{
@@ -909,6 +949,7 @@ function toggleNote(id){{
       if(userLat===null){{
         userLat=pos.coords.latitude;userLon=pos.coords.longitude;
         updateWalkTimes();showLocBadge('📍 Using your GPS location');
+        enablePOIButtons('Near you');
       }}
     }},null,{{timeout:5000}});
   }}
@@ -1014,7 +1055,7 @@ function toggleNote(id){{
     <div class="apt-s"><div class="apt-v">{apt.get("cost_local","?")}</div><div class="apt-l">Local</div></div>
     <div class="apt-s"><div class="apt-v">~${apt.get("cost_usd","?")}</div><div class="apt-l">USD est.</div></div>
   </div>
-  <button class="nav-btn" style="margin-top:10px" onclick="airportNav('{apt_airport}','{dest}')">📍 Directions from Airport</button>
+  <button class="nav-btn" style="margin-top:10px" data-airport="{apt_airport}" data-city="{dest}" onclick="airportNav(this)">📍 Directions from Airport</button>
 </div></div>''')
 
     H.append(f'''<div class="card"><div class="sec">
@@ -1024,17 +1065,139 @@ function toggleNote(id){{
 
     H.append('</div>')  # /middle col
 
-    # RIGHT col — restaurants & attractions (don't touch)
+    # RIGHT col — lazy-load restaurants & attractions by location
     H.append('<div class="col col-right">')
 
-    H.append(f'''<div class="card"><div class="sec">
-  <div class="sh"><div class="sh-ico ico-orange">🍽️</div><span class="sh-label">Restaurants</span></div>
-  {poi_rows(rests, dest)}
+    H.append('''<div class="card"><div class="sec">
+  <div class="sh"><div class="sh-ico ico-orange">&#x1F37D;&#xFE0F;</div><span class="sh-label">Restaurants</span></div>
+  <div id="poi-restaurants" class="poi-placeholder">
+    <div class="poi-hint" id="hint-restaurants">Enter your hotel above to get nearby recommendations</div>
+    <button id="load-restaurants" class="poi-load-btn" disabled onclick="loadPOI(\'restaurants\')">&#x1F37D; Load Nearby Restaurants</button>
+  </div>
+</div></div>''')
+
+    H.append('''<div class="card"><div class="sec">
+  <div class="sh"><div class="sh-ico ico-blue">&#x1F5FA;&#xFE0F;</div><span class="sh-label">Attractions</span></div>
+  <div id="poi-attractions" class="poi-placeholder">
+    <div class="poi-hint" id="hint-attractions">Enter your hotel above to get nearby recommendations</div>
+    <button id="load-attractions" class="poi-load-btn" disabled onclick="loadPOI(\'attractions\')">&#x1F5FA; Load Nearby Attractions</button>
+  </div>
+</div></div>''')
+
+    H.append('</div>')  # /right col
+    H.append('</div>')  # /main
+    H.append(f'<script>{js}</script>')
+    H.append('</body></html>')
+    return "".join(H)
+
+
+
+def generate_pdf(html_content: str, output_path: str) -> bool:
+    """
+    Try to generate a PDF from the HTML using weasyprint.
+    Returns True on success, False if weasyprint is not installed.
+
+    To enable:  pip install weasyprint
+    """
+    try:
+        from weasyprint import HTML
+        HTML(string=html_content).write_pdf(output_path)
+        return True
+    except ImportError:
+        return False
+    except Exception as e:
+        print(f"    ⚠️  PDF generation error: {e}")
+        return False
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SECTION 9: MAIN — Entry point
+# ══════════════════════════════════════════════════════════════════════════════
+
+def main():
+    print()
+    print("╔══════════════════════════════════════════════════════════════╗")
+    print("║      ✈️   SAPIENS SALES TRAVEL BRIEF AGENT                  ║")
+    print("╚══════════════════════════════════════════════════════════════╝")
+
+    # Get inputs — from command line or interactive prompts
+    if len(sys.argv) in (6, 7):
+        origin               = sys.argv[1]
+        destination_city     = sys.argv[2]
+        destination_country  = sys.argv[3]
+        start_date           = sys.argv[4]
+        end_date             = sys.argv[5]
+        company_name         = sys.argv[6] if len(sys.argv) == 7 else ""
+    else:
+        print("\n  Enter your trip details:\n")
+        origin              = input("  Origin city (e.g. Tel Aviv):         ").strip()
+        destination_city    = input("  Destination city (e.g. London):      ").strip()
+        destination_country = input("  Destination country (e.g. UK):       ").strip()
+        start_date          = input("  Arrival date   (YYYY-MM-DD):         ").strip()
+        end_date            = input("  Departure date (YYYY-MM-DD):         ").strip()
+        company_name        = input("  Company being visited (optional):    ").strip()
+
+    # Run the agent — this is the main work
+    data = run_agent(origin, destination_city, destination_country, start_date, end_date, company_name)
+
+    if not data:
+        print("\n❌  Agent returned no data. Please check your API key and try again.")
+        sys.exit(1)
+
+    # Save output files
+    output_dir = Path(__file__).parent
+    slug       = f"{destination_city.lower().replace(' ', '_')}_{start_date}"
+    html_path  = output_dir / f"travel_brief_{slug}.html"
+    pdf_path   = output_dir / f"travel_brief_{slug}.pdf"
+
+    print("\n  📄  Generating HTML report...")
+    html_content = generate_html(data)
+    html_path.write_text(html_content, encoding="utf-8")
+    print(f"  ✅  Saved: {html_path.name}")
+
+    print("  📄  Generating PDF...")
+    if generate_pdf(html_content, str(pdf_path)):
+        print(f"  ✅  Saved: {pdf_path.name}")
+    else:
+        print("  ℹ️   PDF skipped — weasyprint not installed.")
+        print("       Option A: pip install weasyprint  then run again.")
+        print("       Option B: open the HTML file, press Ctrl+P → Save as PDF.")
+
+    print()
+    print(f"  ✅  Done!  Travel brief ready for {destination_city}.")
+    print(f"       Open {html_path.name} in your browser to view it.")
+    print()
+
+
+if __name__ == "__main__":
+    main()
+port="{apt_airport}" data-city="{dest}" onclick="airportNav(this)">📍 Directions from Airport</button>
 </div></div>''')
 
     H.append(f'''<div class="card"><div class="sec">
-  <div class="sh"><div class="sh-ico ico-blue">🗺️</div><span class="sh-label">Attractions</span></div>
-  {poi_rows(attr, dest)}
+  <div class="sh"><div class="sh-ico ico-lime">📅</div><span class="sh-label">Public Holidays</span></div>
+  {hol_html}
+</div></div>''')
+
+    H.append('</div>')  # /middle col
+
+    # RIGHT col — lazy-load restaurants & attractions by location
+    H.append('<div class="col col-right">')
+
+    H.append('''<div class="card"><div class="sec">
+  <div class="sh"><div class="sh-ico ico-orange">&#x1F37D;&#xFE0F;</div><span class="sh-label">Restaurants</span></div>
+  <div id="poi-restaurants" class="poi-placeholder">
+    <div class="poi-hint" id="hint-restaurants">Enter your hotel above to get nearby recommendations</div>
+    <button id="load-restaurants" class="poi-load-btn" disabled onclick="loadPOI(\'restaurants\')">&#x1F37D; Load Nearby Restaurants</button>
+  </div>
+</div></div>''')
+
+    H.append('''<div class="card"><div class="sec">
+  <div class="sh"><div class="sh-ico ico-blue">&#x1F5FA;&#xFE0F;</div><span class="sh-label">Attractions</span></div>
+  <div id="poi-attractions" class="poi-placeholder">
+    <div class="poi-hint" id="hint-attractions">Enter your hotel above to get nearby recommendations</div>
+    <button id="load-attractions" class="poi-load-btn" disabled onclick="loadPOI(\'attractions\')">&#x1F5FA; Load Nearby Attractions</button>
+  </div>
 </div></div>''')
 
     H.append('</div>')  # /right col
