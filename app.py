@@ -321,9 +321,7 @@ function poll(job_id){
     .then(data => {
       if (data.status === 'done') {
         clearInterval(msgTimer);
-        document.open();
-        document.write(data.result);
-        document.close();
+        window.location.href = '/result/' + job_id;
       } else if (data.status === 'error') {
         stopLoading();
         document.getElementById('btn').disabled = false;
@@ -418,7 +416,19 @@ def status(job_id):
         job = jobs.get(job_id)
     if not job:
         return jsonify({"status": "error", "result": "Job not found"}), 404
+    # Don't include full HTML in the status response — just signal done
+    if job["status"] == "done":
+        return jsonify({"status": "done"})
     return jsonify(job)
+
+
+@app.route('/result/<job_id>')
+def result(job_id):
+    with jobs_lock:
+        job = jobs.get(job_id)
+    if not job or job["status"] != "done":
+        return "Result not found or not ready.", 404
+    return Response(job["result"], content_type="text/html")
 
 
 # ── Entry point ──────────────────────────────────────────────────────────────
