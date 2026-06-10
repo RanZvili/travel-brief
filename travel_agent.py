@@ -723,6 +723,15 @@ body{
 .walk-btn{flex-shrink:0;background:rgba(255,255,255,0.08);border:1.5px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.8);border-radius:10px;padding:8px 12px;font-size:16px;cursor:pointer;line-height:1}
 .walk-btn:hover,.walk-btn:active{background:rgba(168,85,247,0.3)}
 
+/* ─── LOCATION AUTOCOMPLETE ─── */
+.loc-wrap{position:relative}
+.loc-sugg{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#1e1b4b;border:1.5px solid rgba(168,85,247,0.4);border-radius:12px;z-index:200;max-height:220px;overflow-y:auto;display:none;box-shadow:0 8px 32px rgba(0,0,0,0.5)}
+.loc-sugg.open{display:block}
+.loc-sugg-item{padding:10px 14px;font-size:12px;color:rgba(255,255,255,0.8);cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.06);line-height:1.4}
+.loc-sugg-item:last-child{border-bottom:none}
+.loc-sugg-item:hover,.loc-sugg-item:active{background:rgba(168,85,247,0.2)}
+.loc-sugg-item strong{display:block;color:#fff;font-size:13px;margin-bottom:2px}
+
 /* ─── LAZY POI ─── */
 .poi-placeholder{padding:4px 0 8px 0}
 .poi-hint{font-size:12px;color:rgba(255,255,255,0.35);margin-bottom:12px;font-weight:500;line-height:1.5}
@@ -826,24 +835,75 @@ function geocodeHotel(addr){{
   }}).catch(function(){{}});
 }}
 
-function saveH(v){{
+var _suggestions=[];
+var suggTimer=null;
+
+function onLocInput(v){{
   localStorage.setItem('h',v);
   clearTimeout(geoTimer);
+  clearTimeout(suggTimer);
+  var sugg=document.getElementById('loc-sugg');
   var badge=document.getElementById('loc-badge');
-  if(badge&&v.trim().length===0){{badge.style.display='none';}}
-  if(v.trim().length>4){{
-    if(badge){{badge.textContent='🔍 Finding location…';badge.style.display='block';}}
-    geoTimer=setTimeout(function(){{geocodeHotel(v);}},900);
+  if(v.trim().length===0){{
+    if(badge)badge.style.display='none';
+    if(sugg){{sugg.innerHTML='';sugg.classList.remove('open');}}
+    return;
+  }}
+  if(v.trim().length>2){{
+    if(badge){{badge.textContent='🔍 Searching…';badge.style.display='block';}}
+    suggTimer=setTimeout(function(){{fetchSuggestions(v);}},450);
   }}
 }}
 
+function fetchSuggestions(q){{
+  var url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q+', {dest}')+'&format=json&limit=5&addressdetails=0';
+  fetch(url,{{headers:{{'Accept-Language':'en','User-Agent':'TripBrief/1.0'}}}})
+  .then(function(r){{return r.json();}})
+  .then(function(data){{
+    _suggestions=data||[];
+    var sugg=document.getElementById('loc-sugg');
+    if(!sugg)return;
+    if(!data||data.length===0){{sugg.innerHTML='';sugg.classList.remove('open');return;}}
+    var h='';
+    data.forEach(function(item,i){{
+      var parts=item.display_name.split(',');
+      var name=parts[0].trim();
+      var detail=parts.slice(1,3).join(',').trim();
+      h+='<div class="loc-sugg-item" onclick="selectLocation('+i+')"><strong>'+name+'</strong>'+detail+'</div>';
+    }});
+    sugg.innerHTML=h;sugg.classList.add('open');
+  }}).catch(function(){{}});
+}}
+
+function selectLocation(i){{
+  var item=_suggestions[i];
+  if(!item)return;
+  userLat=parseFloat(item.lat);userLon=parseFloat(item.lon);
+  var inp=document.getElementById('hi');
+  var sugg=document.getElementById('loc-sugg');
+  var parts=item.display_name.split(',');
+  var short=parts.slice(0,3).join(',');
+  if(inp)inp.value=short;
+  if(sugg){{sugg.innerHTML='';sugg.classList.remove('open');}}
+  localStorage.setItem('h',short);
+  updateWalkTimes();
+  showLocBadge('📍 Location set');
+  enablePOIButtons('Nearby');
+}}
+
+document.addEventListener('click',function(e){{
+  if(!e.target.closest||(!e.target.closest('#hi')&&!e.target.closest('#loc-sugg'))){{
+    var sugg=document.getElementById('loc-sugg');
+    if(sugg){{sugg.innerHTML='';sugg.classList.remove('open');}}
+  }}
+}});
+
 function walkTo(btn){{
   var dest=btn.getAttribute('data-dest')||'';
-  var h=(document.getElementById('hi').value||'').trim();
   var url='https://www.google.com/maps/dir/?api=1';
-  if(h) url+='&origin='+encodeURIComponent(h);
-  else if(userLat) url+='&origin='+userLat+','+userLon;
-  if(dest&&dest!==',' ) url+='&destination='+encodeURIComponent(dest);
+  if(userLat) url+='&origin='+userLat+','+userLon;
+  else{{var h=(document.getElementById('hi').value||'').trim();if(h)url+='&origin='+encodeURIComponent(h);}}
+  if(dest&&dest!==',') url+='&destination='+encodeURIComponent(dest);
   url+='&travelmode=walking';
   window.open(url,'_blank');
 }}
@@ -851,10 +911,9 @@ function walkTo(btn){{
 function airportNav(btn){{
   var airport=btn.getAttribute('data-airport')||'';
   var city=btn.getAttribute('data-city')||'';
-  var h=(document.getElementById('hi').value||'').trim();
-  var dest=h||(city+' city center');
   var url='https://www.google.com/maps/dir/?api=1&travelmode=transit';
   if(airport) url+='&origin='+encodeURIComponent(airport);
+  var dest=userLat?(userLat+','+userLon):((document.getElementById('hi').value||'').trim()||(city+' city center'));
   url+='&destination='+encodeURIComponent(dest);
   window.open(url,'_blank');
 }}
@@ -943,20 +1002,33 @@ function toggleNote(id){{
   if(btn)btn.textContent=open?'▴ less':'▾ more';
 }}
 
-// On load: restore hotel & try GPS
+// On load: GPS immediately as default, restore saved location if any
 (function(){{
-  var s=localStorage.getItem('h');
-  if(s&&s.trim().length>0){{
-    document.getElementById('hi').value=s;
-    geocodeHotel(s);
-  }} else if(navigator.geolocation){{
+  // Always request GPS — it's the default
+  if(navigator.geolocation){{
     navigator.geolocation.getCurrentPosition(function(pos){{
-      if(userLat===null){{
+      if(userLat===null){{  // only if no manual location set yet
         userLat=pos.coords.latitude;userLon=pos.coords.longitude;
-        updateWalkTimes();showLocBadge('📍 Using your GPS location');
+        updateWalkTimes();showLocBadge('📍 Using GPS location');
         enablePOIButtons('Near you');
       }}
-    }},null,{{timeout:5000}});
+    }},null,{{timeout:8000,enableHighAccuracy:false}});
+  }}
+  // Restore saved location and geocode it (will override GPS)
+  var s=localStorage.getItem('h');
+  if(s&&s.trim().length>0){{
+    var inp=document.getElementById('hi');
+    if(inp)inp.value=s;
+    var url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(s+', {dest}')+'&format=json&limit=1';
+    fetch(url,{{headers:{{'Accept-Language':'en','User-Agent':'TripBrief/1.0'}}}})
+    .then(function(r){{return r.json();}})
+    .then(function(d){{
+      if(d&&d.length>0){{
+        userLat=parseFloat(d[0].lat);userLon=parseFloat(d[0].lon);
+        updateWalkTimes();showLocBadge('📍 Location set');
+        enablePOIButtons('Nearby');
+      }}
+    }}).catch(function(){{}});
   }}
 }})();
 """
@@ -1004,10 +1076,13 @@ function toggleNote(id){{
     H.append('<div class="col col-left">')
 
     H.append(f'''<div class="card"><div class="sec">
-  <div class="sh"><div class="sh-ico ico-green">🏨</div><span class="sh-label">Your Hotel</span></div>
-  <input type="text" id="hi" class="glass-inp" placeholder="Hotel name or address…" oninput="saveH(this.value)">
+  <div class="sh"><div class="sh-ico ico-green">📍</div><span class="sh-label">Your Location</span></div>
+  <div class="loc-wrap">
+    <input type="text" id="hi" class="glass-inp" placeholder="Hotel, office or address…" autocomplete="off" oninput="onLocInput(this.value)">
+    <div id="loc-sugg" class="loc-sugg"></div>
+  </div>
   <div id="loc-badge" style="display:none;font-size:11px;color:#34d399;margin-top:6px;font-weight:600"></div>
-  <div class="inp-hint">Walking times update automatically when hotel is set</div>
+  <div class="inp-hint">Defaults to GPS · type to search hotels, offices or addresses</div>
 </div></div>''')
 
     H.append(f'''<div class="card"><div class="sec">
@@ -1076,7 +1151,7 @@ function toggleNote(id){{
     H.append('''<div class="card"><div class="sec">
   <div class="sh"><div class="sh-ico ico-orange">&#x1F37D;&#xFE0F;</div><span class="sh-label">Restaurants</span></div>
   <div id="poi-restaurants" class="poi-placeholder">
-    <div class="poi-hint" id="hint-restaurants">Enter your hotel above to get nearby recommendations</div>
+    <div class="poi-hint" id="hint-restaurants">Allow location or enter address above to get nearby recommendations</div>
     <button id="load-restaurants" class="poi-load-btn" disabled onclick="loadPOI(\'restaurants\')">&#x1F37D; Load Nearby Restaurants</button>
   </div>
 </div></div>''')
@@ -1113,66 +1188,3 @@ def generate_pdf(html_content: str, output_path: str) -> bool:
     except Exception as e:
         print(f"    ⚠️  PDF generation error: {e}")
         return False
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 9: MAIN — Entry point
-# ══════════════════════════════════════════════════════════════════════════════
-
-def main():
-    print()
-    print("╔══════════════════════════════════════════════════════════════╗")
-    print("║      ✈️   SAPIENS SALES TRAVEL BRIEF AGENT                  ║")
-    print("╚══════════════════════════════════════════════════════════════╝")
-
-    # Get inputs — from command line or interactive prompts
-    if len(sys.argv) in (6, 7):
-        origin               = sys.argv[1]
-        destination_city     = sys.argv[2]
-        destination_country  = sys.argv[3]
-        start_date           = sys.argv[4]
-        end_date             = sys.argv[5]
-        company_name         = sys.argv[6] if len(sys.argv) == 7 else ""
-    else:
-        print("\n  Enter your trip details:\n")
-        origin              = input("  Origin city (e.g. Tel Aviv):         ").strip()
-        destination_city    = input("  Destination city (e.g. London):      ").strip()
-        destination_country = input("  Destination country (e.g. UK):       ").strip()
-        start_date          = input("  Arrival date   (YYYY-MM-DD):         ").strip()
-        end_date            = input("  Departure date (YYYY-MM-DD):         ").strip()
-        company_name        = input("  Company being visited (optional):    ").strip()
-
-    # Run the agent — this is the main work
-    data = run_agent(origin, destination_city, destination_country, start_date, end_date, company_name)
-
-    if not data:
-        print("\n❌  Agent returned no data. Please check your API key and try again.")
-        sys.exit(1)
-
-    # Save output files
-    output_dir = Path(__file__).parent
-    slug       = f"{destination_city.lower().replace(' ', '_')}_{start_date}"
-    html_path  = output_dir / f"travel_brief_{slug}.html"
-    pdf_path   = output_dir / f"travel_brief_{slug}.pdf"
-
-    print("\n  📄  Generating HTML report...")
-    html_content = generate_html(data)
-    html_path.write_text(html_content, encoding="utf-8")
-    print(f"  ✅  Saved: {html_path.name}")
-
-    print("  📄  Generating PDF...")
-    if generate_pdf(html_content, str(pdf_path)):
-        print(f"  ✅  Saved: {pdf_path.name}")
-    else:
-        print("  ℹ️   PDF skipped — weasyprint not installed.")
-        print("       Option A: pip install weasyprint  then run again.")
-        print("       Option B: open the HTML file, press Ctrl+P \u2192 Save as PDF.")
-
-    print()
-    print(f"  \u2705  Done!  Travel brief ready for {destination_city}.")
-    print(f"       Open {html_path.name} in your browser to view it.")
-    print()
-
-
-if __name__ == "__main__":
-    main()
