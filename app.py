@@ -155,6 +155,7 @@ input[readonly]{opacity:.7;cursor:default}
     <div class="step" id="s3"></div>
     <div class="step" id="s4"></div>
   </div>
+  <div id="dbg" style="margin-top:12px;font-size:11px;color:rgba(255,255,255,0.3);font-family:monospace;text-align:center"></div>
 </div>
 
 <script>
@@ -330,22 +331,36 @@ document.addEventListener('visibilitychange', () => {
 
 // 2. Poll until done
 let pollStart = Date.now();
+let pollCount = 0;
+function dbg(msg) {
+  const el = document.getElementById('dbg');
+  if (el) el.textContent = msg;
+}
 function poll(job_id){
   if (isPolling) return;
   isPolling = true;
+  pollCount++;
   const elapsed = Math.round((Date.now() - pollStart) / 1000);
+  dbg('poll #' + pollCount + ' · ' + elapsed + 's elapsed');
   if (elapsed > 30) {
     document.getElementById('msg').textContent = `Still working… (${elapsed}s) — almost there`;
   }
   fetch('/status/' + job_id + '?t=' + Date.now(), {cache: 'no-store'})
-    .then(r => r.json())
+    .then(r => {
+      dbg('poll #' + pollCount + ' · HTTP ' + r.status);
+      return r.json();
+    })
     .then(data => {
       isPolling = false;
+      dbg('poll #' + pollCount + ' · status=' + data.status);
       if (data.status === 'done') {
         clearInterval(msgTimer);
+        sessionStorage.removeItem('tb_active_job');
+        dbg('redirecting to /result/' + job_id);
         window.location.href = '/result/' + job_id;
       } else if (data.status === 'error') {
         currentJobId = null;
+        sessionStorage.removeItem('tb_active_job');
         stopLoading();
         document.getElementById('btn').disabled = false;
         alert('Error: ' + data.result);
@@ -353,7 +368,11 @@ function poll(job_id){
         setTimeout(() => poll(job_id), 3000);
       }
     })
-    .catch(() => { isPolling = false; setTimeout(() => poll(job_id), 3000); });
+    .catch(err => {
+      isPolling = false;
+      dbg('poll #' + pollCount + ' · ERROR: ' + err.message);
+      setTimeout(() => poll(job_id), 3000);
+    });
 }
 </script>
 </body></html>"""
