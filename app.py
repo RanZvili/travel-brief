@@ -169,6 +169,15 @@ const msgs = [
 
 // ── Restore saved form values + auto-detect origin ────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
+  // Resume any in-progress job (survives iOS Safari page reload)
+  const savedJob = sessionStorage.getItem('tb_active_job');
+  if (savedJob) {
+    pollStart = Date.now();
+    currentJobId = savedJob;
+    startLoading();
+    poll(savedJob);
+  }
+
   FIELDS.forEach(id => {
     const el = document.getElementById(id);
     const saved = localStorage.getItem('tb_' + id);
@@ -328,7 +337,7 @@ function poll(job_id){
   if (elapsed > 30) {
     document.getElementById('msg').textContent = `Still working… (${elapsed}s) — almost there`;
   }
-  fetch('/status/' + job_id)
+  fetch('/status/' + job_id + '?t=' + Date.now(), {cache: 'no-store'})
     .then(r => r.json())
     .then(data => {
       isPolling = false;
@@ -429,11 +438,16 @@ def status(job_id):
     with jobs_lock:
         job = jobs.get(job_id)
     if not job:
-        return jsonify({"status": "error", "result": "Job not found"}), 404
+        resp = jsonify({"status": "error", "result": "Job not found"})
+        resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+        return resp, 404
     # Don't include full HTML in the status response — just signal done
     if job["status"] == "done":
-        return jsonify({"status": "done"})
-    return jsonify(job)
+        resp = jsonify({"status": "done"})
+    else:
+        resp = jsonify(job)
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+    return resp
 
 
 @app.route('/result/<job_id>')
