@@ -167,13 +167,35 @@ const msgs = [
   "Compiling your dashboard",
 ];
 
-// ── Restore saved form values ──────────────────────────────────────────────
+// ── Restore saved form values + auto-detect origin ────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   FIELDS.forEach(id => {
     const el = document.getElementById(id);
     const saved = localStorage.getItem('tb_' + id);
     if (el && saved) el.value = saved;
   });
+
+  // Auto-detect origin city if not already saved
+  const originEl = document.getElementById('origin');
+  if (originEl && !originEl.value && navigator.geolocation) {
+    originEl.placeholder = '📍 Detecting location…';
+    navigator.geolocation.getCurrentPosition(pos => {
+      const {latitude: lat, longitude: lon} = pos.coords;
+      fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`, {
+        headers: {'Accept-Language': 'en', 'User-Agent': 'TripBrief/1.0'}
+      })
+      .then(r => r.json())
+      .then(d => {
+        const city = d.address?.city || d.address?.town || d.address?.village || d.address?.county || '';
+        if (city) {
+          originEl.value = city;
+          localStorage.setItem('tb_origin', city);
+        }
+        originEl.placeholder = 'Tel Aviv';
+      })
+      .catch(() => { originEl.placeholder = 'Tel Aviv'; });
+    }, () => { originEl.placeholder = 'Tel Aviv'; }, {timeout: 5000});
+  }
 });
 FIELDS.forEach(id => {
   const el = document.getElementById(id);
