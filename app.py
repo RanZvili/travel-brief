@@ -522,20 +522,31 @@ def poi():
 
 @app.route('/geocode')
 def geocode():
-    """Proxy Nominatim search so browser CORS/User-Agent issues are avoided."""
+    """Proxy geocoding via Photon (Komoot) — no API key, works for hotel/business names."""
     q = request.args.get('q', '').strip()
     if not q:
         return jsonify([])
     try:
         r = requests.get(
-            'https://nominatim.openstreetmap.org/search',
-            params={'q': q, 'format': 'json', 'limit': 5, 'addressdetails': 0},
-            headers={'User-Agent': 'TripBrief/1.0', 'Accept-Language': 'en'},
+            'https://photon.komoot.io/api/',
+            params={'q': q, 'limit': 5, 'lang': 'en'},
             timeout=8
         )
-        return jsonify(r.json())
-    except Exception:
-        return jsonify([])
+        data = r.json()
+        # Normalise to Nominatim-style [{lat, lon, display_name}]
+        results = []
+        for f in data.get('features', []):
+            props = f.get('properties', {})
+            coords = f.get('geometry', {}).get('coordinates', [None, None])
+            parts = [props.get(k) for k in ('name', 'street', 'city', 'country') if props.get(k)]
+            results.append({
+                'lat': str(coords[1]),
+                'lon': str(coords[0]),
+                'display_name': ', '.join(parts) if parts else q,
+            })
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/test')
@@ -568,7 +579,6 @@ def status(job_id):
         resp = jsonify({"status": "error", "result": "Job not found"})
         resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
         return resp, 404
-    # Don't include full HTML in the status response — just signal done
     if job["status"] == "done":
         resp = jsonify({"status": "done"})
     else:
@@ -586,10 +596,9 @@ def result(job_id):
     return Response(job["result"], content_type="text/html")
 
 
-# ── Entry point ──────────────────────────────────────────────────────────────
-
+# Entry point
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_ENV') == 'development'
-    print(f"\n✈️  Travel Brief running at http://localhost:{port}\n")
+    print(f'Travel Brief running at http://localhost:{port}')
     app.run(host='0.0.0.0', port=port, debug=debug)
