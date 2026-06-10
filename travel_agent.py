@@ -410,10 +410,8 @@ def run_agent(origin: str, destination_city: str, destination_country: str,
         f"Do NOT call any tools — all real-time data is already provided above."
     )
 
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.5-flash-lite:generateContent?key={api_key}"
-    )
+    MODELS = ["gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash"]
+    base_url = "https://generativelanguage.googleapis.com/v1beta/models/"
     payload = {
         "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
         "contents": [{"parts": [{"text": message}]}],
@@ -421,28 +419,42 @@ def run_agent(origin: str, destination_city: str, destination_country: str,
     }
 
     response_text = None
-    for attempt in range(6):
-        try:
-            resp = requests.post(url, json=payload, timeout=90)
-            if resp.status_code == 429:
-                retry_after = int(resp.headers.get("Retry-After", 30 * (attempt + 1)))
-                print(f"    ⏳  Rate limited. Waiting {retry_after}s (attempt {attempt+1}/6)...")
-                _time.sleep(retry_after)
-                if attempt == 5:
-                    raise RuntimeError(f"Rate limited after 6 attempts: {resp.text}")
+    last_error = None
+    for model in MODELS:
+        url = f"{base_url}{model}:generateContent?key={api_key}"
+        for attempt in range(4):
+            try:
+                resp = requests.post(url, json=payload, timeout=90)
+                if resp.status_code == 429:
+                    wait = int(resp.headers.get("Retry-After", 20 * (attempt + 1)))
+                    print(f"    ⏳  Rate limited on {model}. Waiting {wait}s...")
+                    _time.sleep(wait)
+                    continue
+                if resp.status_code in (500, 502, 503, 504):
+                    wait = 10 * (attempt + 1)
+                    print(f"    ⏳  {resp.status_code} from {model}. Waiting {wait}s (attempt {attempt+1}/4)...")
+                    _time.sleep(wait)
+                    last_error = f"{resp.status_code} from {model}"
+                    continue
+                resp.raise_for_status()
+                data = resp.json()
+                response_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                break
+            except requests.exceptions.Timeout:
+                print(f"    ⏳  Timeout on {model} (attempt {attempt+1}/4), retrying...")
+                last_error = f"Timeout on {model}"
                 continue
-            resp.raise_for_status()
-            data = resp.json()
-            response_text = data["candidates"][0]["content"]["parts"][0]["text"]
+            except RuntimeError:
+                raise
+            except Exception as e:
+                last_error = str(e)
+                break
+        if response_text:
             break
-        except requests.exceptions.Timeout:
-            print(f"    ⏳  Request timed out (attempt {attempt+1}/6), retrying...")
-            if attempt == 5:
-                raise RuntimeError("Gemini API timed out after 6 attempts.")
-        except RuntimeError:
-            raise
-        except Exception as e:
-            raise RuntimeError(f"Gemini API error: {e}")
+        print(f"    ⚠️  {model} failed, trying next model...")
+
+    if not response_text:
+        raise RuntimeError(f"All Gemini models failed. Last error: {last_error}")
 
     # ── Step 3: parse JSON from response ────────────────────────────────────
     text = response_text.strip()
@@ -1171,12 +1183,10 @@ function toggleNote(id){{
     return "".join(H)
 
 
-
 def generate_pdf(html_content: str, output_path: str) -> bool:
     """
     Try to generate a PDF from the HTML using weasyprint.
     Returns True on success, False if weasyprint is not installed.
-
     To enable:  pip install weasyprint
     """
     try:
@@ -1186,5 +1196,57 @@ def generate_pdf(html_content: str, output_path: str) -> bool:
     except ImportError:
         return False
     except Exception as e:
-        print(f"    ⚠️  PDF generation error: {e}")
+        print(f"    \u26a0\ufe0f  PDF generation error: {e}")
         return False
+
+
+# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+# SECTION 9: MAIN \u2014 Entry point
+# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+
+def main():
+    import sys
+    args = sys.argv[1:]
+    if len(args) == 5:
+        origin_city, destination_city, destination_country, depart_date, return_date = args
+    else:
+        print("\n\u2708\ufe0f  SAPIENS SALES TRAVEL BRIEF GENERATOR\n")
+        origin_city        = input("  Origin city (e.g. Tel Aviv): ").strip()
+        destination_city   = input("  Destination city (e.g. London): ").strip()
+        destination_country= input("  Destination country (e.g. United Kingdom): ").strip()
+        depart_date        = input("  Departure date (YYYY-MM-DD): ").strip()
+        return_date        = input("  Return date   (YYYY-MM-DD): ").strip()
+
+    out_dir = Path(__file__).parent
+    slug = destination_city.lower().replace(' ', '_')
+    html_path = out_dir / f"travel_brief_{slug}_{depart_date}.html"
+    pdf_path  = out_dir / f"travel_brief_{slug}_{depart_date}.pdf"
+
+    print(f"\n  Generating brief for {destination_city}, {destination_country}...")
+    html_content = run_agent(
+        origin_city=origin_city,
+        destination_city=destination_city,
+        destination_country=destination_country,
+        depart_date=depart_date,
+        return_date=return_date,
+    )
+
+    html_path.write_text(html_content, encoding="utf-8")
+    print(f"  \u2705  Saved: {html_path.name}")
+
+    print("  \U0001f4c4  Generating PDF...")
+    if generate_pdf(html_content, str(pdf_path)):
+        print(f"  \u2705  Saved: {pdf_path.name}")
+    else:
+        print("  \u2139\ufe0f   PDF skipped \u2014 weasyprint not installed.")
+        print("       Option A: pip install weasyprint  then run again.")
+        print("       Option B: open the HTML file, press Ctrl+P \u2192 Save as PDF.")
+
+    print()
+    print(f"  \u2705  Done!  Travel brief ready for {destination_city}.")
+    print(f"       Open {html_path.name} in your browser to view it.")
+    print()
+
+
+if __name__ == "__main__":
+    main()

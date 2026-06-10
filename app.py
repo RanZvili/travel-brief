@@ -480,15 +480,33 @@ def poi():
             f'[{{"name":"...","type":"...","lat":0.0,"lon":0.0,"notes":"short reason"}}]'
         )
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={api_key}"
+    _POI_MODELS = ["gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash"]
+    _base = "https://generativelanguage.googleapis.com/v1beta/models/"
     payload = {
         'contents': [{'parts': [{'text': prompt}]}],
         'generationConfig': {'temperature': 0.4},
     }
+    raw_text = None
+    last_err = None
+    import time as _t
+    for _model in _POI_MODELS:
+        _url = f"{_base}{_model}:generateContent?key={api_key}"
+        for _attempt in range(3):
+            try:
+                r = _req.post(_url, json=payload, timeout=45)
+                if r.status_code in (429, 500, 502, 503, 504):
+                    _t.sleep(8 * (_attempt + 1))
+                    last_err = f"HTTP {r.status_code}"; continue
+                r.raise_for_status()
+                raw_text = r.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+                break
+            except Exception as e:
+                last_err = str(e); break
+        if raw_text: break
+    if not raw_text:
+        return jsonify({'error': last_err, 'items': []}), 500
     try:
-        r = _req.post(url, json=payload, timeout=45)
-        r.raise_for_status()
-        text = r.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+        text = raw_text
         # Strip markdown fences if present
         if '```' in text:
             parts = text.split('```')
