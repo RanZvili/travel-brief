@@ -296,6 +296,9 @@ function stopLoading(){
 }
 
 // ── Submit with polling ────────────────────────────────────────────────────
+let currentJobId = null;
+let isPolling = false;
+
 function submitForm(e){
   e.preventDefault();
   const data = new URLSearchParams(new FormData(document.getElementById('form')));
@@ -305,24 +308,35 @@ function submitForm(e){
   // 1. Start the job
   fetch('/start', {method:'POST', body: data})
     .then(r => r.json())
-    .then(({job_id}) => poll(job_id))
+    .then(({job_id}) => { currentJobId = job_id; poll(job_id); })
     .catch(() => { stopLoading(); document.getElementById('btn').disabled=false; alert('Could not start. Please try again.'); });
 }
+
+// Resume polling when user returns to the tab (mobile screen unlock / app switch)
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && currentJobId && !isPolling) {
+    poll(currentJobId);
+  }
+});
 
 // 2. Poll until done
 let pollStart = Date.now();
 function poll(job_id){
+  if (isPolling) return;
+  isPolling = true;
   const elapsed = Math.round((Date.now() - pollStart) / 1000);
   if (elapsed > 30) {
-    document.getElementById('msg').textContent = `Still working… (${elapsed}s) — rate limits may cause delays`;
+    document.getElementById('msg').textContent = `Still working… (${elapsed}s) — almost there`;
   }
   fetch('/status/' + job_id)
     .then(r => r.json())
     .then(data => {
+      isPolling = false;
       if (data.status === 'done') {
         clearInterval(msgTimer);
         window.location.href = '/result/' + job_id;
       } else if (data.status === 'error') {
+        currentJobId = null;
         stopLoading();
         document.getElementById('btn').disabled = false;
         alert('Error: ' + data.result);
@@ -330,7 +344,7 @@ function poll(job_id){
         setTimeout(() => poll(job_id), 3000);
       }
     })
-    .catch(() => setTimeout(() => poll(job_id), 3000));
+    .catch(() => { isPolling = false; setTimeout(() => poll(job_id), 3000); });
 }
 </script>
 </body></html>"""
