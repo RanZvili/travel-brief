@@ -692,8 +692,12 @@ body{
 
 /* ─── MAIN: mobile = single col, desktop = 3 col ─── */
 .main{padding:10px;display:flex;flex-direction:column;gap:10px}
+.col-left{order:2}
+.col-mid{order:1}
+.col-right{order:3}
 @media(min-width:900px){
   .main{display:grid;grid-template-columns:38% 37% 25%;align-items:start}
+  .col-left,.col-mid,.col-right{order:unset}
 }
 .col{display:flex;flex-direction:column;gap:10px}
 
@@ -932,8 +936,8 @@ function toggleNote(id){{
     # Main
     H.append('<div class="main">')
 
-    # LEFT col
-    H.append('<div class="col">')
+    # LEFT col — hotel, etiquette, dress code
+    H.append('<div class="col col-left">')
 
     H.append(f'''<div class="card"><div class="sec">
   <div class="sh"><div class="sh-ico ico-green">🏨</div><span class="sh-label">Your Hotel</span></div>
@@ -948,6 +952,16 @@ function toggleNote(id){{
 </div></div>''')
 
     H.append(f'''<div class="card"><div class="sec">
+  <div class="sh"><div class="sh-ico ico-pink">👔</div><span class="sh-label">Dress Code</span></div>
+  <div class="prose">{dress}</div>
+</div></div>''')
+
+    H.append('</div>')  # /left col
+
+    # MIDDLE col — currency first, then practical info
+    H.append('<div class="col col-mid">')
+
+    H.append(f'''<div class="card"><div class="sec">
   <div class="sh"><div class="sh-ico ico-cyan">💰</div><span class="sh-label">Currency & Payments</span></div>
   <div class="stat-big">{cur.get("symbol","")} {cur.get("code","")}</div>
   <div class="stat-sub">{cur.get("name","")} · {cur.get("origin_rate", cur.get("approx_usd_rate",""))}</div>
@@ -955,16 +969,6 @@ function toggleNote(id){{
     <span class="stag">💳 {cur.get("cards_accepted","")}</span>
     <span class="stag">🤝 {cur.get("tipping","")}</span>
   </div>
-</div></div>''')
-
-    H.append('</div>')  # /left col
-
-    # MIDDLE col — practical info
-    H.append('<div class="col">')
-
-    H.append(f'''<div class="card"><div class="sec">
-  <div class="sh"><div class="sh-ico ico-pink">👔</div><span class="sh-label">Dress Code</span></div>
-  <div class="prose">{dress}</div>
 </div></div>''')
 
     H.append(f'''<div class="card"><div class="sec">
@@ -1000,8 +1004,8 @@ function toggleNote(id){{
 
     H.append('</div>')  # /middle col
 
-    # RIGHT col — restaurants & attractions
-    H.append('<div class="col">')
+    # RIGHT col — restaurants & attractions (don't touch)
+    H.append('<div class="col col-right">')
 
     H.append(f'''<div class="card"><div class="sec">
   <div class="sh"><div class="sh-ico ico-orange">🍽️</div><span class="sh-label">Restaurants</span></div>
