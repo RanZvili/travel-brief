@@ -47,8 +47,7 @@ OUTPUT:
   If PDF generation fails, open the HTML and use File → Print → Save as PDF
 """
 
-from google import genai
-from google.genai import types
+# google-genai SDK removed — using direct REST API for reliability
 import requests
 import json
 import os
@@ -416,9 +415,7 @@ def run_agent(origin: str, destination_city: str, destination_country: str,
 
     print("    ✅  Weather and timezone data fetched")
 
-    # ── Step 2: single Gemini call ───────────────────────────────────────────
-    client = genai.Client(api_key=api_key)
-
+    # ── Step 2: single Gemini call (direct REST — no SDK, real timeout) ────────
     message = (
         f"Create a complete travel brief. Here is the pre-fetched real-time data:\n\n"
         f"TRIP:\n"
@@ -433,35 +430,45 @@ def run_agent(origin: str, destination_city: str, destination_country: str,
         f"Do NOT call any tools — all real-time data is already provided above."
     )
 
-    gemini_config = types.GenerateContentConfig(
-        system_instruction=SYSTEM_PROMPT,
-        temperature=0.1,
-        thinking_config=types.ThinkingConfig(thinking_budget=0),  # disable thinking → fast
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"gemini-2.5-flash:generateContent?key={api_key}"
     )
+    payload = {
+        "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+        "contents": [{"parts": [{"text": message}]}],
+        "generationConfig": {
+            "temperature": 0.1,
+            "thinkingConfig": {"thinkingBudget": 0},  # disable thinking → fast
+        },
+    }
 
-    # Retry on 429
+    response_text = None
     for attempt in range(6):
         try:
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=message,
-                config=gemini_config,
-            )
-            break
-        except Exception as e:
-            err = str(e)
-            if "429" in err or "quota" in err.lower():
-                m = re.search(r'retry in ([\d.]+)s', err)
-                wait = float(m.group(1)) + 2 if m else 30 * (attempt + 1)
-                print(f"    ⏳  Rate limited. Waiting {wait:.0f}s (attempt {attempt+1}/6)...")
-                _time.sleep(wait)
+            resp = requests.post(url, json=payload, timeout=90)
+            if resp.status_code == 429:
+                retry_after = int(resp.headers.get("Retry-After", 30 * (attempt + 1)))
+                print(f"    ⏳  Rate limited. Waiting {retry_after}s (attempt {attempt+1}/6)...")
+                _time.sleep(retry_after)
                 if attempt == 5:
-                    raise
-            else:
-                raise
+                    raise RuntimeError(f"Rate limited after 6 attempts: {resp.text}")
+                continue
+            resp.raise_for_status()
+            data = resp.json()
+            response_text = data["candidates"][0]["content"]["parts"][0]["text"]
+            break
+        except requests.exceptions.Timeout:
+            print(f"    ⏳  Request timed out (attempt {attempt+1}/6), retrying...")
+            if attempt == 5:
+                raise RuntimeError("Gemini API timed out after 6 attempts.")
+        except RuntimeError:
+            raise
+        except Exception as e:
+            raise RuntimeError(f"Gemini API error: {e}")
 
     # ── Step 3: parse JSON from response ────────────────────────────────────
-    text = response.text.strip()
+    text = response_text.strip()
     if text.startswith("```"):
         parts = text.split("```")
         text = parts[1] if len(parts) > 1 else text
