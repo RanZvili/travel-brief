@@ -587,20 +587,20 @@ def generate_html(data: dict) -> str:
             lat_attrs = f' data-lat="{lat}" data-lon="{lon}"' if lat and lon else ""
             h += (
                 f'<div class="poi">'
-                f'  <div class="poi-n">{i}</div>'
-                f'  <div class="poi-body">'
-                f'    <div class="poi-top">'
-                f'      <div style="flex:1;min-width:0">'
-                f'        <div class="poi-title">{nm}</div>'
-                f'        <div class="poi-meta">{meta}{price}'
+                f'  <div class="poi-top">'
+                f'    <div style="flex:1;min-width:0">'
+                f'      <div class="poi-title-row">'
+                f'        <span class="poi-n">{i}</span>'
+                f'        <span class="poi-title">{nm}</span>'
+                f'      </div>'
+                f'      <div class="poi-meta">{meta}{price}'
                 + (f' <button class="expand-btn" onclick="toggleNote(\'{pid}\')" id="btn-{pid}">▾ more</button>' if note else '')
                 + f'</div>'
-                f'      </div>'
-                f'      <button class="walk-btn" id="wb-{pid}" onclick="walkTo(\'{nm}, {dest_name}\')" {lat_attrs}>🗺</button>'
                 f'    </div>'
-                + (f'    <div class="poi-note" id="{pid}">{note}</div>' if note else '')
-                + f'  </div>'
-                f'</div>'
+                f'    <button class="walk-btn" id="wb-{pid}" onclick="walkTo(\'{nm}, {dest_name}\')" {lat_attrs}>🗺</button>'
+                f'  </div>'
+                + (f'  <div class="poi-note" id="{pid}">{note}</div>' if note else '')
+                + f'</div>'
             )
         return h
 
@@ -745,9 +745,9 @@ body{
 /* ─── POI ─── */
 .poi{padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06)}
 .poi:last-child{border-bottom:none}
-.poi-body{flex:1;min-width:0}
 .poi-top{display:flex;align-items:flex-start;gap:10px}
-.poi-n{width:28px;height:28px;border-radius:9px;background:linear-gradient(135deg,#a855f7,#3b82f6);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;margin-top:2px}
+.poi-title-row{display:flex;align-items:center;gap:8px;margin-bottom:3px}
+.poi-n{width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,#a855f7,#3b82f6);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0}
 .poi-title{font-size:15px;font-weight:700;color:#fff;line-height:1.2}
 .poi-meta{font-size:12px;color:rgba(168,85,247,0.95);font-weight:600;margin-top:3px;display:flex;align-items:center;flex-wrap:wrap;gap:6px}
 /* collapsible note */
