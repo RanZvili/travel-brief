@@ -420,7 +420,10 @@ def run_agent(origin: str, destination_city: str, destination_country: str,
     model = genai.GenerativeModel(
         model_name="gemini-2.5-flash",
         system_instruction=SYSTEM_PROMPT,
-        generation_config={"temperature": 0.1},
+        generation_config={
+            "temperature": 0.1,
+            "thinking_config": {"thinking_budget": 0},  # disable slow thinking mode
+        },
     )
 
     message = (
@@ -437,10 +440,13 @@ def run_agent(origin: str, destination_city: str, destination_country: str,
         f"Do NOT call any tools — all real-time data is already provided above."
     )
 
-    # Retry on 429
+    # Retry on 429, with 90s HTTP timeout per attempt
     for attempt in range(6):
         try:
-            response = model.generate_content(message)
+            response = model.generate_content(
+                message,
+                request_options={"timeout": 90},
+            )
             break
         except Exception as e:
             err = str(e)
@@ -451,6 +457,10 @@ def run_agent(origin: str, destination_city: str, destination_country: str,
                 _time.sleep(wait)
                 if attempt == 5:
                     raise
+            elif "timeout" in err.lower() or "deadline" in err.lower():
+                print(f"    ⏳  Request timed out, retrying (attempt {attempt+1}/6)...")
+                if attempt == 5:
+                    raise RuntimeError("Gemini API timed out after multiple attempts.")
             else:
                 raise
 
