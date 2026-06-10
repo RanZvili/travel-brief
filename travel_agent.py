@@ -897,7 +897,7 @@ function fetchSuggestions(q){{
     _suggestions=photonToResults(data);
     var sugg=document.getElementById('loc-sugg');
     if(!sugg)return;
-    if(!_suggestions.length){{sugg.innerHTML='';sugg.classList.remove('open');return;}}
+    if(!_suggestions.length){{sugg.innerHTML='';sugg.classList.remove('open');showLocBadge('⚠️ No results found');return;}}
     var h='';
     _suggestions.forEach(function(item,i){{
       var parts=item.display_name.split(',');
@@ -907,7 +907,11 @@ function fetchSuggestions(q){{
     }});
     positionSugg();
     sugg.innerHTML=h;sugg.classList.add('open');
-  }}).catch(function(){{}});
+    showLocBadge('');
+  }}).catch(function(e){{
+    showLocBadge('⚠️ Search failed');
+    console.error('Geocode error:',e);
+  }});
 }}
 
 function selectLocation(i){{
