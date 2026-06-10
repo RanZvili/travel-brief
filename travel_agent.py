@@ -289,8 +289,9 @@ currency:
 
 public_holidays:
   - Any public holidays in the destination country that fall within the travel dates
+  - Each holiday must be an object with "name" (string) and "date" (string, format "Mon DD" e.g. "Jun 6")
   - Flag if this could affect business meetings (offices closed, etc.)
-  - If none, explicitly say so
+  - If none, return an empty array
 
 business_etiquette:
   - 4-6 cultural norms that matter when meeting insurance/financial executives in that country
@@ -353,7 +354,7 @@ Return ONLY a single valid JSON object. No markdown fences, no explanatory prose
     "cards_accepted": "Cards accepted almost everywhere, contactless preferred",
     "tipping": "10-15% in restaurants if service charge not already included; round up for taxis"
   },
-  "public_holidays": [],
+  "public_holidays": [{"name": "Christmas Day", "date": "Dec 25"}],
   "business_etiquette": "Punctuality is crucial — being even 5 minutes late is noticed. Greet with a firm handshake and eye contact. Business cards are exchanged but without ceremony. Understatement is valued: avoid boasting about your company or product. Small talk before business is normal (weather, sports). Avoid discussing salary, politics, or religion. Thank-you emails after meetings are appreciated.",
   "airport_transfer": {
     "airport_name": "Heathrow Airport",
@@ -563,10 +564,14 @@ def generate_html(data: dict) -> str:
     trans_html = "".join(f'<span class="tpill">{t.get("name","")}</span>' for t in trans)
 
     if hols:
-        hol_html = "".join(
-            f'<div class="hol-warn">⚠️ {h if isinstance(h,str) else h.get("name","")}</div>'
-            for h in hols
-        )
+        def fmt_hol(h):
+            if isinstance(h, str):
+                return f'<div class="hol-warn">⚠️ {h}</div>'
+            date = h.get("date", "")
+            name = h.get("name", "")
+            label = f"{date} — {name}" if date else name
+            return f'<div class="hol-warn">⚠️ {label}</div>'
+        hol_html = "".join(fmt_hol(h) for h in hols)
     else:
         hol_html = '<div class="hol-ok">✅ No public holidays</div>'
 
@@ -1161,10 +1166,10 @@ def main():
     else:
         print("  ℹ️   PDF skipped — weasyprint not installed.")
         print("       Option A: pip install weasyprint  then run again.")
-        print("       Option B: open the HTML file, press Ctrl+P → Save as PDF.")
+        print("       Option B: open the HTML file, press Ctrl+P \u2192 Save as PDF.")
 
     print()
-    print(f"  ✅  Done!  Travel brief ready for {destination_city}.")
+    print(f"  \u2705  Done!  Travel brief ready for {destination_city}.")
     print(f"       Open {html_path.name} in your browser to view it.")
     print()
 
