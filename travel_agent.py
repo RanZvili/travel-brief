@@ -737,7 +737,7 @@ body{
 
 /* ─── LOCATION AUTOCOMPLETE ─── */
 .loc-wrap{position:relative}
-.loc-sugg{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#1e1b4b;border:1.5px solid rgba(168,85,247,0.4);border-radius:12px;z-index:200;max-height:220px;overflow-y:auto;display:none;box-shadow:0 8px 32px rgba(0,0,0,0.5)}
+.loc-sugg{position:fixed;background:#1e1b4b;border:1.5px solid rgba(168,85,247,0.4);border-radius:12px;z-index:9999;max-height:220px;overflow-y:auto;display:none;box-shadow:0 8px 32px rgba(0,0,0,0.5)}
 .loc-sugg.open{display:block}
 .loc-sugg-item{padding:10px 14px;font-size:12px;color:rgba(255,255,255,0.8);cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.06);line-height:1.4}
 .loc-sugg-item:last-child{border-bottom:none}
@@ -867,6 +867,16 @@ function onLocInput(v){{
   }}
 }}
 
+function positionSugg(){{
+  var sugg=document.getElementById('loc-sugg');
+  var inp=document.getElementById('hi');
+  if(!sugg||!inp)return;
+  var r=inp.getBoundingClientRect();
+  sugg.style.top=(r.bottom+4)+'px';
+  sugg.style.left=r.left+'px';
+  sugg.style.width=r.width+'px';
+}}
+
 function fetchSuggestions(q){{
   var url='/geocode?q='+encodeURIComponent(q+', {dest}');
   fetch(url)
@@ -883,6 +893,7 @@ function fetchSuggestions(q){{
       var detail=parts.slice(1,3).join(',').trim();
       h+='<div class="loc-sugg-item" onclick="selectLocation('+i+')"><strong>'+name+'</strong>'+detail+'</div>';
     }});
+    positionSugg();
     sugg.innerHTML=h;sugg.classList.add('open');
   }}).catch(function(){{}});
 }}
@@ -1240,10 +1251,12 @@ def main():
     else:
         print("  \u2139\ufe0f   PDF skipped \u2014 weasyprint not installed.")
         print("       Option A: pip install weasyprint  then run again.")
-        print("       Option B: open the HTML file, press Ctrl+P \u2192 Save as PDF.")
+        print("  ℹ️   PDF skipped — weasyprint not installed.")
+        print("       Option A: pip install weasyprint  then run again.")
+        print("       Option B: open the HTML file, press Ctrl+P → Save as PDF.")
 
     print()
-    print(f"  \u2705  Done!  Travel brief ready for {destination_city}.")
+    print(f"  ✅  Done!  Travel brief ready for {destination_city}.")
     print(f"       Open {html_path.name} in your browser to view it.")
     print()
 
