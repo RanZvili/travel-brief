@@ -47,7 +47,8 @@ OUTPUT:
   If PDF generation fails, open the HTML and use File → Print → Save as PDF
 """
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import requests
 import json
 import os
@@ -416,12 +417,7 @@ def run_agent(origin: str, destination_city: str, destination_country: str,
     print("    ✅  Weather and timezone data fetched")
 
     # ── Step 2: single Gemini call ───────────────────────────────────────────
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(
-        model_name="gemini-2.0-flash",   # no thinking mode → fast, ~20-30s
-        system_instruction=SYSTEM_PROMPT,
-        generation_config={"temperature": 0.1},
-    )
+    client = genai.Client(api_key=api_key)
 
     message = (
         f"Create a complete travel brief. Here is the pre-fetched real-time data:\n\n"
@@ -437,10 +433,20 @@ def run_agent(origin: str, destination_city: str, destination_country: str,
         f"Do NOT call any tools — all real-time data is already provided above."
     )
 
-    # Retry on 429, with 90s HTTP timeout per attempt
+    gemini_config = types.GenerateContentConfig(
+        system_instruction=SYSTEM_PROMPT,
+        temperature=0.1,
+        thinking_config=types.ThinkingConfig(thinking_budget=0),  # disable thinking → fast
+    )
+
+    # Retry on 429
     for attempt in range(6):
         try:
-            response = model.generate_content(message)
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=message,
+                config=gemini_config,
+            )
             break
         except Exception as e:
             err = str(e)
@@ -451,10 +457,6 @@ def run_agent(origin: str, destination_city: str, destination_country: str,
                 _time.sleep(wait)
                 if attempt == 5:
                     raise
-            elif "timeout" in err.lower() or "deadline" in err.lower():
-                print(f"    ⏳  Request timed out, retrying (attempt {attempt+1}/6)...")
-                if attempt == 5:
-                    raise RuntimeError("Gemini API timed out after multiple attempts.")
             else:
                 raise
 
