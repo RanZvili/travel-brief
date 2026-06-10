@@ -310,7 +310,8 @@ attractions:
 
 airport_transfer:
   - Best way from the main international airport to city center
-  - Include: mode of transport (metro, train, taxi, bus), estimated time, approximate cost
+  - Include: airport_name (full name of the main international airport, e.g. "Arlanda Airport"),
+    mode of transport (metro, train, taxi, bus), estimated time, approximate cost
     in both local currency and USD
 
 company_addresses:
@@ -376,6 +377,7 @@ Return ONLY a single valid JSON object. No markdown fences, no explanatory prose
     {"name": "Borough Market", "type": "Food market", "lat": 51.5055, "lon": -0.0910, "notes": "Best food market in London, open Thursdays–Saturdays. Perfect for a quick lunch or to bring back local gifts."}
   ],
   "airport_transfer": {
+    "airport_name": "Heathrow Airport",
     "recommended": "Heathrow Express train to Paddington",
     "time_mins": 15,
     "cost_local": "£25-32",
@@ -872,6 +874,12 @@ function walkTo(dest){{
   window.open(url,'_blank');
 }}
 
+function airportNav(airport, city){{
+  var h=(document.getElementById('hi').value||'').trim();
+  var dest=h||city+' city center';
+  window.open('https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(airport)+'&destination='+encodeURIComponent(dest)+'&travelmode=transit','_blank');
+}}
+
 function toggleNote(id){{
   var el=document.getElementById(id);
   var btn=document.getElementById('btn-'+id);
@@ -987,6 +995,7 @@ function toggleNote(id){{
   <div class="tpills">{trans_html}</div>
 </div></div>''')
 
+    apt_airport = apt.get("airport_name", f"{dest} Airport")
     H.append(f'''<div class="card"><div class="sec">
   <div class="sh"><div class="sh-ico ico-red">🚌</div><span class="sh-label">Airport Transfer</span></div>
   <div class="apt-name">{apt.get("recommended","")}</div>
@@ -995,6 +1004,7 @@ function toggleNote(id){{
     <div class="apt-s"><div class="apt-v">{apt.get("cost_local","?")}</div><div class="apt-l">Local</div></div>
     <div class="apt-s"><div class="apt-v">~${apt.get("cost_usd","?")}</div><div class="apt-l">USD est.</div></div>
   </div>
+  <button class="nav-btn" style="margin-top:10px" onclick="airportNav('{apt_airport}','{dest}')">📍 Directions from Airport</button>
 </div></div>''')
 
     H.append(f'''<div class="card"><div class="sec">
