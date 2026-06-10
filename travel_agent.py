@@ -418,7 +418,7 @@ def run_agent(origin: str, destination_city: str, destination_country: str,
     # ── Step 2: single Gemini call ───────────────────────────────────────────
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash",
+        model_name="gemini-2.0-flash",   # no thinking mode → fast, ~20-30s
         system_instruction=SYSTEM_PROMPT,
         generation_config={"temperature": 0.1},
     )
@@ -440,10 +440,7 @@ def run_agent(origin: str, destination_city: str, destination_country: str,
     # Retry on 429, with 90s HTTP timeout per attempt
     for attempt in range(6):
         try:
-            response = model.generate_content(
-                message,
-                request_options={"timeout": 90},
-            )
+            response = model.generate_content(message)
             break
         except Exception as e:
             err = str(e)
