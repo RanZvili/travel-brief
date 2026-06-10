@@ -835,12 +835,13 @@ function showLocBadge(msg){{
 }}
 
 function geocodeHotel(addr){{
-  var q=encodeURIComponent(addr+', {dest}');
-  fetch('/geocode?q='+q)
+  var url='https://photon.komoot.io/api/?q='+encodeURIComponent(addr+', {dest}')+'&limit=1&lang=en';
+  fetch(url)
   .then(function(r){{return r.json();}})
   .then(function(d){{
-    if(d&&d.length>0){{
-      userLat=parseFloat(d[0].lat);userLon=parseFloat(d[0].lon);
+    var res=photonToResults(d);
+    if(res.length>0){{
+      userLat=parseFloat(res[0].lat);userLon=parseFloat(res[0].lon);
       updateWalkTimes();showLocBadge('📍 Hotel location found');
       enablePOIButtons('Near hotel');
     }} else {{showLocBadge('⚠️ Hotel not found — check address');}}
@@ -877,17 +878,28 @@ function positionSugg(){{
   sugg.style.width=r.width+'px';
 }}
 
+function photonToResults(data){{
+  var out=[];
+  (data.features||[]).forEach(function(f){{
+    var p=f.properties||{{}};
+    var c=(f.geometry||{{}}).coordinates||[null,null];
+    var parts=[p.name,p.street,p.city,p.country].filter(Boolean);
+    out.push({{lat:String(c[1]),lon:String(c[0]),display_name:parts.join(', ')||'?'}});
+  }});
+  return out;
+}}
 function fetchSuggestions(q){{
-  var url='/geocode?q='+encodeURIComponent(q+', {dest}');
+  var url='https://photon.komoot.io/api/?'+
+    'q='+encodeURIComponent(q+', {dest}')+'&limit=5&lang=en';
   fetch(url)
   .then(function(r){{return r.json();}})
   .then(function(data){{
-    _suggestions=data||[];
+    _suggestions=photonToResults(data);
     var sugg=document.getElementById('loc-sugg');
     if(!sugg)return;
-    if(!data||data.length===0){{sugg.innerHTML='';sugg.classList.remove('open');return;}}
+    if(!_suggestions.length){{sugg.innerHTML='';sugg.classList.remove('open');return;}}
     var h='';
-    data.forEach(function(item,i){{
+    _suggestions.forEach(function(item,i){{
       var parts=item.display_name.split(',');
       var name=parts[0].trim();
       var detail=parts.slice(1,3).join(',').trim();
@@ -1042,12 +1054,13 @@ function toggleNote(id){{
   if(s&&s.trim().length>0){{
     var inp=document.getElementById('hi');
     if(inp)inp.value=s;
-    var url='/geocode?q='+encodeURIComponent(s+', {dest}');
+    var url='https://photon.komoot.io/api/?q='+encodeURIComponent(s+', {dest}')+'&limit=1&lang=en';
     fetch(url)
     .then(function(r){{return r.json();}})
     .then(function(d){{
-      if(d&&d.length>0){{
-        userLat=parseFloat(d[0].lat);userLon=parseFloat(d[0].lon);
+      var res=photonToResults(d);
+      if(res.length>0){{
+        userLat=parseFloat(res[0].lat);userLon=parseFloat(res[0].lon);
         updateWalkTimes();showLocBadge('📍 Location set');
         enablePOIButtons('Nearby');
       }}
