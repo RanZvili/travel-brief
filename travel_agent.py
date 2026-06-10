@@ -410,7 +410,7 @@ def run_agent(origin: str, destination_city: str, destination_country: str,
         f"Do NOT call any tools — all real-time data is already provided above."
     )
 
-    MODELS = ["gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash"]
+    MODELS = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash-lite"]
     base_url = "https://generativelanguage.googleapis.com/v1beta/models/"
     payload = {
         "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
@@ -422,17 +422,17 @@ def run_agent(origin: str, destination_city: str, destination_country: str,
     last_error = None
     for model in MODELS:
         url = f"{base_url}{model}:generateContent?key={api_key}"
-        for attempt in range(4):
+        for attempt in range(2):
             try:
-                resp = requests.post(url, json=payload, timeout=90)
+                resp = requests.post(url, json=payload, timeout=55)
                 if resp.status_code == 429:
-                    wait = int(resp.headers.get("Retry-After", 20 * (attempt + 1)))
+                    wait = int(resp.headers.get("Retry-After", 15))
                     print(f"    ⏳  Rate limited on {model}. Waiting {wait}s...")
                     _time.sleep(wait)
                     continue
                 if resp.status_code in (500, 502, 503, 504):
-                    wait = 10 * (attempt + 1)
-                    print(f"    ⏳  {resp.status_code} from {model}. Waiting {wait}s (attempt {attempt+1}/4)...")
+                    wait = 8 * (attempt + 1)
+                    print(f"    ⏳  {resp.status_code} from {model}. Waiting {wait}s (attempt {attempt+1}/2)...")
                     _time.sleep(wait)
                     last_error = f"{resp.status_code} from {model}"
                     continue
@@ -441,9 +441,9 @@ def run_agent(origin: str, destination_city: str, destination_country: str,
                 response_text = data["candidates"][0]["content"]["parts"][0]["text"]
                 break
             except requests.exceptions.Timeout:
-                print(f"    ⏳  Timeout on {model} (attempt {attempt+1}/4), retrying...")
+                print(f"    ⏳  Timeout on {model} (attempt {attempt+1}/2), trying next...")
                 last_error = f"Timeout on {model}"
-                continue
+                break
             except RuntimeError:
                 raise
             except Exception as e:

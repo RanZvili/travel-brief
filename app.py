@@ -382,7 +382,7 @@ function poll(job_id){
 
 def run_job(job_id, origin, destination_city, destination_country, start_date, end_date, company_name):
     import concurrent.futures
-    TIMEOUT = 240  # 4 minutes max
+    TIMEOUT = 360  # 6 minutes max
 
     def _work():
         data = run_agent(
