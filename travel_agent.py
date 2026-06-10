@@ -420,10 +420,7 @@ def run_agent(origin: str, destination_city: str, destination_country: str,
     model = genai.GenerativeModel(
         model_name="gemini-2.5-flash",
         system_instruction=SYSTEM_PROMPT,
-        generation_config={
-            "temperature": 0.1,
-            "thinking_config": {"thinking_budget": 0},  # disable slow thinking mode
-        },
+        generation_config={"temperature": 0.1},
     )
 
     message = (
