@@ -854,82 +854,41 @@ var suggTimer=null;
 
 function onLocInput(v){{
   localStorage.setItem('h',v);
-  clearTimeout(geoTimer);
   clearTimeout(suggTimer);
-  var sugg=document.getElementById('loc-sugg');
   var badge=document.getElementById('loc-badge');
   if(v.trim().length===0){{
     if(badge)badge.style.display='none';
-    if(sugg){{sugg.innerHTML='';sugg.classList.remove('open');}}
     return;
   }}
   if(v.trim().length>2){{
     if(badge){{badge.textContent='🔍 Searching…';badge.style.display='block';}}
-    suggTimer=setTimeout(function(){{fetchSuggestions(v);}},450);
+    suggTimer=setTimeout(function(){{autoGeocode(v);}},900);
   }}
 }}
 
-function positionSugg(){{
-  var sugg=document.getElementById('loc-sugg');
-  var inp=document.getElementById('hi');
-  if(!sugg||!inp)return;
-  var r=inp.getBoundingClientRect();
-  sugg.style.top=(r.bottom+4)+'px';
-  sugg.style.left=r.left+'px';
-  sugg.style.width=r.width+'px';
-}}
-
-function fetchSuggestions(q){{
+function autoGeocode(q){{
   var url='https://nominatim.openstreetmap.org/search'
-    +'?format=json&limit=5&accept-language=en'
+    +'?format=json&limit=1&accept-language=en'
     +'&q='+encodeURIComponent(q+', {dest}');
   fetch(url,{{headers:{{'Accept':'application/json'}}}})  
   .then(function(r){{return r.json();}})
-  .then(function(data){{
-    _suggestions=(data||[]).map(function(d){{
-      return {{lat:d.lat,lon:d.lon,display_name:d.display_name||''}};
-    }});
-    var sugg=document.getElementById('loc-sugg');
-    if(!sugg)return;
-    if(!_suggestions.length){{sugg.innerHTML='';sugg.classList.remove('open');showLocBadge('⚠️ No results found');return;}}
-    var h='';
-    _suggestions.forEach(function(item,i){{
-      var parts=item.display_name.split(',');
-      var name=parts[0].trim();
-      var detail=parts.slice(1,3).join(',').trim();
-      h+='<div class="loc-sugg-item" onclick="selectLocation('+i+')"><strong>'+name+'</strong>'+detail+'</div>';
-    }});
-    positionSugg();
-    sugg.innerHTML=h;sugg.classList.add('open');
-    showLocBadge('');
+  .then(function(d){{
+    var badge=document.getElementById('loc-badge');
+    if(d&&d.length>0){{
+      userLat=parseFloat(d[0].lat);userLon=parseFloat(d[0].lon);
+      var short=d[0].display_name.split(',').slice(0,3).join(',');
+      if(badge){{badge.textContent='📍 '+short;badge.style.display='block';}}
+      updateWalkTimes();
+      enablePOIButtons('Nearby');
+    }} else {{
+      if(badge){{badge.textContent='⚠️ Not found — try a nearby landmark';badge.style.display='block';}}
+    }}
   }}).catch(function(e){{
-    showLocBadge('⚠️ Search failed');
-    console.error('Geocode error:',e);
+    var badge=document.getElementById('loc-badge');
+    if(badge){{badge.textContent='⚠️ Search error';badge.style.display='block';}}
+    console.error('Geocode:',e);
   }});
 }}
-
-function selectLocation(i){{
-  var item=_suggestions[i];
-  if(!item)return;
-  userLat=parseFloat(item.lat);userLon=parseFloat(item.lon);
-  var inp=document.getElementById('hi');
-  var sugg=document.getElementById('loc-sugg');
-  var parts=item.display_name.split(',');
-  var short=parts.slice(0,3).join(',');
-  if(inp)inp.value=short;
-  if(sugg){{sugg.innerHTML='';sugg.classList.remove('open');}}
-  localStorage.setItem('h',short);
-  updateWalkTimes();
-  showLocBadge('📍 Location set');
-  enablePOIButtons('Nearby');
-}}
-
-document.addEventListener('click',function(e){{
-  if(!e.target.closest||(!e.target.closest('#hi')&&!e.target.closest('#loc-sugg'))){{
-    var sugg=document.getElementById('loc-sugg');
-    if(sugg){{sugg.innerHTML='';sugg.classList.remove('open');}}
-  }}
-}});
 
 function walkTo(btn){{
   var dest=btn.getAttribute('data-dest')||'';
@@ -1114,7 +1073,7 @@ function toggleNote(id){{
   <div class="sh"><div class="sh-ico ico-green">📍</div><span class="sh-label">Your Location</span></div>
   <div class="loc-wrap">
     <input type="text" id="hi" class="glass-inp" placeholder="Hotel, office or address…" autocomplete="off" oninput="onLocInput(this.value)">
-    <div id="loc-sugg" class="loc-sugg"></div>
+    
   </div>
   <div id="loc-badge" style="display:none;font-size:11px;color:#34d399;margin-top:6px;font-weight:600"></div>
   <div class="inp-hint">Defaults to GPS · type to search hotels, offices or addresses</div>
